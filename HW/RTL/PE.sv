@@ -101,7 +101,7 @@ end
 // a_data, b_data, c_data;
 assign a_data = (mode == CONV_MODE) ? data_in   : mul_val_reg;
 assign b_data = (mode == CONV_MODE) ? weight_in : mac_reg;
-assign c_data = (mode == CONV_MODE) ? mac_reg  : add_val_reg;
+assign c_data = (mode == CONV_MODE) ? mac_reg   : add_val_reg;
 
 assign t_valid = pe_cmd_valid && pe_cmd == TRIGGER;
 

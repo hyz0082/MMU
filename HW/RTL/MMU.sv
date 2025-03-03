@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 // =============================================================================
-//  Program : MMU.v
+//  Program : MMU.sv
 //  Author  : 
 //  Date    : 
 // -----------------------------------------------------------------------------
@@ -290,7 +290,7 @@ assign rdata_2_out = {mac_value[1], mac_value[5], mac_value[ 9], mac_value[13]};
 assign rdata_3_out = {mac_value[2], mac_value[6], mac_value[10], mac_value[14]};
 assign rdata_4_out = {mac_value[3], mac_value[7], mac_value[11], mac_value[15]};
 
-always_comb @(posedge clk_i) begin
+always_comb begin
        mmu_busy = |pe_busy;
 end
 
