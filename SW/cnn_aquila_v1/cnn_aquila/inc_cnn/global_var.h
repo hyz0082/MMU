@@ -1,0 +1,1 @@
+float_t *weights, *inputs;
