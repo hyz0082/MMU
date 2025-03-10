@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 // =============================================================================
-//  Program : MMU.sv
+//  Program : GeMM.sv
 //  Author  : 
 //  Date    : 
 // -----------------------------------------------------------------------------
@@ -18,8 +18,10 @@ module MMU
     /////////// MMU command ///////////////////////////////////////////////
     input   logic                        mmu_cmd_valid, // cmd valid
     input   logic   [ACLEN : 0]          mmu_cmd,       // cmd
-    input   logic   [DATA_WIDTH-1 : 0]   param_1_in,    // cmd ctrl
-    input   logic   [DATA_WIDTH-1 : 0]   param_2_in,    // data
+    input   logic   [DATA_WIDTH*4-1 : 0]   param_1_in,    // cmd ctrl
+    input   logic   [DATA_WIDTH*4-1 : 0]   param_2_in,    // data
+    input   logic   [DATA_WIDTH*4-1 : 0]   param_3_in,    // data
+    input   logic   [DATA_WIDTH*4-1 : 0]   param_4_in,    // data
 
     /////////// MMU input   ///////////////////////////////////////////////
     input   logic   [DATA_WIDTH-1 : 0]   data_1_in,
@@ -41,23 +43,25 @@ module MMU
 
 
 // mmu_cmd table
-parameter  RESET             = 0; // whole
-parameter  TRIGGER           = 1; // whole
-parameter  SET_MUL_VAL       = 2; // partial
+localparam  RESET             = 0; // whole
+localparam  TRIGGER           = 1; // whole
+localparam  TRIGGER_LAST      = 2; // 
+                                  // param_1_in: 
+                                  // param_2_in:
+localparam  SET_MUL_VAL       = 3; // partial
                                   // param_1_in: column number
                                   // param_2_in: multipled value
 
-parameter  SET_ADD_VAL       = 3; // partial
+localparam  SET_ADD_VAL       = 4; // partial
                                   // param_1_in: column number
                                   // param_2_in: added value
 
-parameter  SET_PE_VAL        = 4; // partial
+localparam  SET_PE_VAL        = 5; // partial
                                   // param_1_in: PE number
                                   // param_2_in: initialized value
-parameter  SET_CONV_MODE     = 5; // whole
-parameter  SET_FIX_MAC_MODE  = 6; // whole
-parameter  IDLE              = 7; // whole
-
+localparam  SET_CONV_MODE     = 6; // whole
+localparam  SET_FIX_MAC_MODE  = 7; // whole
+localparam  FORWARD              = 8; // whole
 
 
 logic [DATA_WIDTH-1 : 0] row_1_reg;
@@ -68,9 +72,9 @@ logic [DATA_WIDTH-1 : 0] col_1_reg;
 logic [DATA_WIDTH-1 : 0] col_2_reg [0:1];
 logic [DATA_WIDTH-1 : 0] col_3_reg [0:2];
 
-//************************
+//#########################
 //    4 X 4 PE SIGNAL
-//************************
+//#########################
 logic          [4:0]     pe_busy   ;
 logic [DATA_WIDTH-1 : 0] data_in   [0:3];
 logic [DATA_WIDTH-1 : 0] weight_in [0:3];
@@ -85,10 +89,19 @@ logic pe_cmd_valid [0:15];
 logic whole_pe_select;
 logic column_select [0:3];
 
-assign whole_pe_select = (mmu_cmd == RESET)          || 
-                         (mmu_cmd == TRIGGER)        || 
-                         (mmu_cmd == SET_CONV_MODE)  || 
-                         (mmu_cmd == SET_FIX_MAC_MODE);
+logic   [DATA_WIDTH*4-1 : 0] params [0 : 3];
+
+assign params[0] = param_1_in;
+assign params[1] = param_2_in;
+assign params[2] = param_3_in;
+assign params[3] = param_4_in;
+
+assign whole_pe_select = (mmu_cmd == RESET)            || 
+                         (mmu_cmd == TRIGGER)          ||
+                         (mmu_cmd == TRIGGER_LAST)     ||
+                         (mmu_cmd == SET_CONV_MODE)    || 
+                         (mmu_cmd == SET_FIX_MAC_MODE) || 
+                         (mmu_cmd == FORWARD);
 
 assign column_select[0] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 0) ||
                           (mmu_cmd == SET_ADD_VAL) && (param_1_in == 0);
@@ -176,7 +189,9 @@ always_ff @( posedge clk_i) begin
               col_3_reg[1] <= 0; 
               col_3_reg[0] <= 0;
        end
-       if(mmu_cmd_valid && mmu_cmd == TRIGGER) begin
+       if(mmu_cmd_valid && mmu_cmd == TRIGGER ||
+          mmu_cmd_valid && mmu_cmd == TRIGGER_LAST ||
+          mmu_cmd_valid && mmu_cmd == FORWARD) begin
               // ROW 1
               row_1_reg    <= data_2_in;
               // ROW 2
@@ -210,9 +225,9 @@ always_comb begin
        weight_in[3] = col_3_reg[0];
 end
 
-//************************
+//#########################
 //       4 X 4 PE
-//************************
+//#########################
 genvar i;
 
 generate
@@ -224,7 +239,8 @@ generate
                          .pe_cmd_valid(pe_cmd_valid[0]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
-                         .param_2_in(param_2_in), 
+                         .param_2_in(param_2_in),
+                         .preload_data_in(params[0][127 : 96]),
                          .data_in(data_in[0]),
                          .weight_in(weight_in[0]),
                          .data_out(data_out[0]), 
@@ -240,7 +256,8 @@ generate
                          .pe_cmd_valid(pe_cmd_valid[i]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
-                         .param_2_in(param_2_in), 
+                         .param_2_in(param_2_in),
+                         .preload_data_in(params[i][127 : 96]),
                          .data_in(data_out[i-1]),
                          .weight_in(weight_in[i]),
                          .data_out(data_out[i]), 
@@ -256,7 +273,8 @@ generate
                          .pe_cmd_valid(pe_cmd_valid[i]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
-                         .param_2_in(param_2_in), 
+                         .param_2_in(param_2_in),
+                         .preload_data_in(params[0][127-(32*(i/4)) : 96-(32*(i/4))]),
                          .data_in(data_in[i/4]),
                          .weight_in(weight_out[i-4]),
                          .data_out(data_out[i]), 
@@ -272,7 +290,8 @@ generate
                          .pe_cmd_valid(pe_cmd_valid[i]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
-                         .param_2_in(param_2_in), 
+                         .param_2_in(param_2_in),
+                         .preload_data_in(params[i%4][127-(32*(i/4)) : 96-(32*(i/4))]),
                          .data_in(data_out[i-1]),
                          .weight_in(weight_out[i-4]),
                          .data_out(data_out[i]), 

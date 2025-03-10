@@ -39,11 +39,11 @@ module global_buffer
 // Global buffer read write behavior                                          //
 //----------------------------------------------------------------------------//
   always @ (posedge clk_i) begin
-    if(rst_i)begin
-      for(i=0; i<(DEPTH); i=i+1)
-        gbuff[i] <= 'd0;
-    end
-    else begin
+    // if(rst_i)begin
+    //   for(i=0; i<(DEPTH); i=i+1)
+    //     gbuff[i] <= 'd0;
+    // end
+    // else begin
       if(wr_en) begin
         gbuff[index] <= data_in;
       end
@@ -51,6 +51,6 @@ module global_buffer
         data_out <= gbuff[index];
       end
     end
-  end
+  // end
 
 endmodule

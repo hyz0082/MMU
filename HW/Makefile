@@ -23,6 +23,13 @@ mmu: clean
 	$(VERILOG) -g2005-sv -o verif2/simulation $(TESTBENCH)/TESTBENCH.v -I $(TESTBENCH) -I $(RTL_DIR) -D RTL
 	$(SIM) verif2/simulation +access+r
 
+tpu: clean
+	python3 tpu_generator.py --mode 1 --target_dir verif2 --ncases 10
+	cp verif2/input.txt verif2/input.bk
+	mv verif2/input.txt $(TESTBENCH)/
+	$(VERILOG) -g2005-sv -o verif2/simulation $(TESTBENCH)/TESTBENCH.v -I $(TESTBENCH) -I $(RTL_DIR) -D RTL
+	$(SIM) verif2/simulation +access+r
+
 verif3: clean
 	python3 data_generator.py --mode 2 --target_dir verif3 --ncases 10
 	cp verif3/input.txt verif3/input.bk
