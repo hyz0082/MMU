@@ -93,7 +93,7 @@ typedef enum {IDLE_S, HW_RESET_S,
               LOAD_IDX_S,
               READ_DATA_1_S, READ_DATA_2_S, 
               READ_DATA_3_S, READ_DATA_4_S,
-              READ_DATA_5_S, //READ_DATA_6_S,
+              READ_DATA_5_S,
               TRIGGER_S, TRIGGER_LAST_S,
               FORWARD_S,
               WAIT_IDLE_S,
@@ -268,7 +268,8 @@ always_comb begin
             else if(tpu_cmd_valid && tpu_cmd == SW_READ_DATA    ) next_state = SW_READ_DATA_S;
             else         next_state = IDLE_S;
     HW_RESET_S    : next_state = IDLE_S;
-    LOAD_IDX_S    : next_state = READ_DATA_1_S;
+    LOAD_IDX_S    : next_state = PRELOAD_DATA_S;
+    PRELOAD_DATA_S: next_state = READ_DATA_1_S;
     READ_DATA_1_S : next_state = READ_DATA_2_S;
     READ_DATA_2_S : next_state = READ_DATA_3_S;
     READ_DATA_3_S : next_state = READ_DATA_4_S;
@@ -287,7 +288,6 @@ always_comb begin
              else                   next_state = NEXT_COL_S;
     NEXT_ROW_S: next_state = PRELOAD_DATA_S;
     NEXT_COL_S: next_state = PRELOAD_DATA_S;
-    PRELOAD_DATA_S: next_state = READ_DATA_1_S;
     SW_READ_DATA_S: next_state = OUTPUT_1_S;
     OUTPUT_1_S    : next_state = OUTPUT_2_S;
     OUTPUT_2_S    : next_state = OUTPUT_3_S;
@@ -425,7 +425,7 @@ end
 //#       ROW INDEX       #
 //#########################
 always_ff @(posedge clk_i) begin
-    if(next_state == LOAD_IDX_S) begin
+    if(curr_state == LOAD_IDX_S) begin
         for(int i = 0; i < 4; i++) begin
             row_idx[i] <= row_idx_start[i];
         end
@@ -452,14 +452,12 @@ always_ff @(posedge clk_i) begin
     else if(curr_state == NEXT_ROW_S || curr_state == NEXT_COL_S) begin
         row_offset <= 0;
     end
-    else if(curr_state == LOAD_IDX_S    ||
-            curr_state == PRELOAD_DATA_S||
+    else if(curr_state == PRELOAD_DATA_S||
             curr_state == READ_DATA_1_S || 
             curr_state == READ_DATA_2_S || 
             curr_state == READ_DATA_3_S || 
             curr_state == READ_DATA_4_S ||
             curr_state == READ_DATA_5_S || 
-            // curr_state == READ_DATA_6_S ||
             curr_state == TRIGGER_S  ||
             curr_state == TRIGGER_LAST_S) begin
         row_offset <= row_offset + 1;
@@ -494,7 +492,7 @@ end
 //#       COL INDEX       #
 //#########################
 always_ff @(posedge clk_i) begin
-    if(next_state == LOAD_IDX_S) begin
+    if(curr_state == LOAD_IDX_S) begin
         for(int i = 0; i < 4; i++) begin
             col_idx[i] <= col_idx_start[i];
         end
@@ -789,7 +787,7 @@ always_comb begin
        (curr_state == TRIGGER_S                             ) ||
        (curr_state == TRIGGER_LAST_S                        ) ||
        (curr_state == FORWARD_S                             ) ||
-       (curr_state == PRELOAD_DATA_S && preload)) begin
+       (curr_state == READ_DATA_2_S && preload)) begin
         mmu_cmd_valid = 1; 
     end
     else begin
@@ -806,11 +804,21 @@ always_comb begin
     if(curr_state == FORWARD_S) begin
         mmu_cmd         = FORWARD;
     end
+    else if(curr_state == READ_DATA_2_S) begin
+        mmu_cmd = SET_PE_VAL;
+    end
     else begin
         mmu_cmd         = tpu_cmd_reg;
     end
-    mmu_param_in[0] = param_1_in_reg;
-    mmu_param_in[1] = param_2_in_reg;
+    if(curr_state == READ_DATA_2_S) begin
+        mmu_param_in[0] = P_data_out_reg[0];
+        mmu_param_in[1] = P_data_out_reg[1];
+    end
+    else begin
+        mmu_param_in[0] = param_1_in_reg;
+        mmu_param_in[1] = param_2_in_reg;
+    end
+
     mmu_param_in[2] = P_data_out_reg[2];
     mmu_param_in[3] = P_data_out_reg[3];
     

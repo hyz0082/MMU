@@ -101,7 +101,8 @@ assign whole_pe_select = (mmu_cmd == RESET)            ||
                          (mmu_cmd == TRIGGER_LAST)     ||
                          (mmu_cmd == SET_CONV_MODE)    || 
                          (mmu_cmd == SET_FIX_MAC_MODE) || 
-                         (mmu_cmd == FORWARD);
+                         (mmu_cmd == FORWARD)          ||
+                         (mmu_cmd == SET_PE_VAL);
 
 assign column_select[0] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 0) ||
                           (mmu_cmd == SET_ADD_VAL) && (param_1_in == 0);
@@ -114,56 +115,40 @@ assign column_select[3] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 3) ||
 always_comb begin : PE_VALID
        // column 0
        pe_cmd_valid[0]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[0])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 0);
+                          (mmu_cmd_valid && column_select[0]);
        pe_cmd_valid[4]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[0])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 4);
+                          (mmu_cmd_valid && column_select[0]);
        pe_cmd_valid[8]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[0])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 8);
+                          (mmu_cmd_valid && column_select[0]);
        pe_cmd_valid[12] = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[0])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 12);
+                          (mmu_cmd_valid && column_select[0]);
        // column 1
        pe_cmd_valid[1]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[1])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 1);
+                          (mmu_cmd_valid && column_select[1]);
        pe_cmd_valid[5]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[1])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 5);
+                          (mmu_cmd_valid && column_select[1]);
        pe_cmd_valid[9]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[1])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 9);
+                          (mmu_cmd_valid && column_select[1]);
        pe_cmd_valid[13] = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[1])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 13);
+                          (mmu_cmd_valid && column_select[1]);
        // column 2
        pe_cmd_valid[2]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[2])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 2);
+                          (mmu_cmd_valid && column_select[2]);
        pe_cmd_valid[6]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[2])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 6);
+                          (mmu_cmd_valid && column_select[2]);
        pe_cmd_valid[10] = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[2])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 10);
+                          (mmu_cmd_valid && column_select[2]);
        pe_cmd_valid[14] = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[2])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 14);
+                          (mmu_cmd_valid && column_select[2]);
        // column 3
        pe_cmd_valid[3]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[3])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 3);
+                          (mmu_cmd_valid && column_select[3]);
        pe_cmd_valid[7]  = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[3])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 7);
+                          (mmu_cmd_valid && column_select[3]);
        pe_cmd_valid[11] = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[3])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 11);
+                          (mmu_cmd_valid && column_select[3]);
        pe_cmd_valid[15] = (mmu_cmd_valid && whole_pe_select)     || 
-                          (mmu_cmd_valid && column_select[3])   ||
-                          (mmu_cmd_valid && mmu_cmd == SET_PE_VAL && param_1_in == 15);  
+                          (mmu_cmd_valid && column_select[3]);  
                          
 end
 

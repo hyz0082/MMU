@@ -437,24 +437,47 @@ end endtask
 task golden_check; begin
     integer nrow_gc;
     integer i, j;
-    integer k;
+    integer k, cnt, out, off_s;
     err = 0;
-
+    cnt = 0;
+    off_s = 0;
+    // C_matrix_golden
+    // logic [31:0] rbuf;
+    // logic   [DATA_WIDTH-1 : 0]  out;
+    for(int m = 0; m < 5; m++) begin
+        off_s = (m/4)*64;
+        for(i = 0; i < 8; i++) begin
+            for(j = 0; j < 8; j++) begin
+                @(negedge clk_i);
+                tpu_cmd_valid = 1;
+                tpu_param_1_in = ((m%4)*4) + cnt;
+                tpu_param_2_in = off_s;
+                tpu_cmd = SW_READ_DATA;
+                @(negedge clk_i);
+                tpu_cmd_valid = 0;
+                cnt++;
+                if(cnt == 4) begin
+                    cnt = 0;
+                    off_s++;
+                end
+                wait (ret_valid);
+                @(negedge clk_i);
+                if(ret_data_out > C_matrix_golden[m][i][j])
+                    out = ret_data_out - C_matrix_golden[m][i][j];
+                else
+                    out = C_matrix_golden[m][i][j] - ret_data_out;
+                if(out >= 10) begin
+                    $display("golden[%3d][%3d][%3d] = %x, expect = %x", m, i, j, C_matrix_golden[m][i][j], ret_data_out);
+                    err++;
+                end
+                    
+                // dummy_var_for_iverilog = $fscanf(in_fd, "%h", rbuf);
+                // C_matrix_golden[m][i][j] = rbuf;   
+            end 
+        end
+    end
     
-    @(negedge clk_i);
-    tpu_cmd_valid = 1;
-    tpu_param_1_in = 0;
-    tpu_param_2_in = 0;
-    tpu_cmd = SW_READ_DATA;
-    @(negedge clk_i);
-    tpu_cmd_valid = 0;
-
-    wait (ret_valid);
-    $display("%x,", ret_data_out);
-    // {C_matrix[0][0], C_matrix[1][0], C_matrix[2][0], C_matrix[3][0]} = rdata_1_out;
-    // {C_matrix[0][1], C_matrix[1][1], C_matrix[2][1], C_matrix[3][1]} = rdata_2_out;
-    // {C_matrix[0][2], C_matrix[1][2], C_matrix[2][2], C_matrix[3][2]} = rdata_3_out;
-    // {C_matrix[0][3], C_matrix[1][3], C_matrix[2][3], C_matrix[3][3]} = rdata_4_out;
+    
 
     // for(i = 0;i< M_golden; i++) begin
     //     for(j = 0; j < N_golden; j++) begin
@@ -464,9 +487,9 @@ task golden_check; begin
     //         end 
     //     end
     // end
-    // if(err != 0) begin
-    //     wrong_ans;
-    // end
+    if(err != 0) begin
+        wrong_ans;
+    end
 
 
 end endtask

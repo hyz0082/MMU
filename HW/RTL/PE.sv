@@ -201,9 +201,9 @@ always@(posedge clk_i) begin
     else if(pe_cmd_valid && pe_cmd == RESET) begin
         mac_reg <= 0;
     end 
-    else if(pe_cmd_valid && pe_cmd == LOAD_DATA) begin
-        mac_reg <= param_2_in;
-    end 
+    // else if(pe_cmd_valid && pe_cmd == LOAD_DATA) begin
+    //     mac_reg <= param_2_in;
+    // end
     else if(acc_last) begin
         mac_reg <= acc_data;
     end
@@ -237,6 +237,10 @@ always_ff @( posedge clk_i ) begin
         r_data_reg  <= r_data;
         r_valid_reg <= r_valid;
     end
+    else if(pe_cmd_valid && pe_cmd == LOAD_DATA) begin
+        r_data_reg  <= preload_data_in;
+        r_valid_reg <= 1;
+    end
 end
 
 //#########################
@@ -247,7 +251,8 @@ always_ff @( posedge clk_i ) begin
         r_last_reg <= 1;
     end
     else if(pe_cmd_valid && pe_cmd == RESET) begin
-        r_last_reg <= 0;
+        // reset accumulator
+        r_last_reg <= 1;
     end
     else begin
         r_last_reg <= 0;
