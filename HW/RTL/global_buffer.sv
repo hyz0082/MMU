@@ -27,7 +27,7 @@ module global_buffer
 
   integer i;
 
-  parameter DEPTH = 2**ADDR_BITS;
+  localparam DEPTH = 2**ADDR_BITS;
 
 //----------------------------------------------------------------------------//
 // Global buffer (Don't change the name)                                      //

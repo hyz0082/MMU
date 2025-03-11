@@ -110,30 +110,29 @@ def gen_one_case(i, in_fd=None, c_fd=None, all_one=False, mode=0, shape_range=(4
         print("check file descriptor is null")
         exit(2)
 
-    #* generate the matrix
-
-    # if all_one:
-    #     Am = np.ones((M, K), dtype=np.uint8)
-    #     Bm = np.ones((K, N), dtype=np.uint8)
-    # elif mode == 4:
-    #     Am = np.random.randint(-128, high=127, size=(M, K), dtype=np.int8)
-    #     Bm = np.random.randint(-128, high=127, size=(K, N), dtype=np.int8) 
-    # else:
-        # np.random.seed(0)
-        # Am = np.random.randint(val_range[0], high=val_range[1], size=(M, K), dtype=np.uint8)
     M = 8
     K = 8
     N = 8
-    np.random.seed(0)
-    img = np.random.rand(M, K).astype(np.float32)
+    kernel_shape = (5, 3, 3)
+    img_shape = (2, 8, 8)
+    # np.random.seed(0)
+    # 2d
+    img_1 = np.random.rand(M, K).astype(np.float32)
+    # 2d
+    img_2 = np.random.rand(M, K).astype(np.float32)
 
     # weight
-    kernel = np.random.rand(3, 3).astype(np.float32)
-    kernel_2 = np.random.rand(3, 3).astype(np.float32)
-    kernel_3 = np.random.rand(3, 3).astype(np.float32)
-    kernel_4 = np.random.rand(3, 3).astype(np.float32)
-    kernel_5 = np.random.rand(3, 3).astype(np.float32)
-    
+    # kernel   = np.random.rand(3, 3).astype(np.float32)
+    # kernel_2 = np.random.rand(3, 3).astype(np.float32)
+    # kernel_3 = np.random.rand(3, 3).astype(np.float32)
+    # kernel_4 = np.random.rand(3, 3).astype(np.float32)
+    # kernel_5 = np.random.rand(3, 3).astype(np.float32)
+    # 3d
+    kernel_1 = [np.random.rand(kernel_shape[1], kernel_shape[2]).astype(np.float32) for _ in range(kernel_shape[0])]
+    # 3d
+    kernel_2 = [np.random.rand(kernel_shape[1], kernel_shape[2]).astype(np.float32) for _ in range(kernel_shape[0])]
+    img = img_1
+    kernel = kernel_1[0]
     img_height = len(img)
     img_width = len(img[0])
     kernel_height = len(kernel)
@@ -143,94 +142,97 @@ def gen_one_case(i, in_fd=None, c_fd=None, all_one=False, mode=0, shape_range=(4
     pad_width = kernel_width // 2
 
     # Pad the image manually
-    padded_img = [[0] * (img_width + 2 * pad_width) for _ in range(img_height + 2 * pad_height)]
+    padded_img_1 = [[0] * (img_width + 2 * pad_width) for _ in range(img_height + 2 * pad_height)]
+    padded_img_2 = [[0] * (img_width + 2 * pad_width) for _ in range(img_height + 2 * pad_height)]
     for i in range(img_height):
         for j in range(img_width):
-            padded_img[i + pad_height][j + pad_width] = img[i][j]
+            padded_img_1[i + pad_height][j + pad_width] = img_1[i][j]
+            padded_img_2[i + pad_height][j + pad_width] = img_2[i][j]
 
-    output   = [[0] * img_width for _ in range(img_height)]
-    output_2 = [[0] * img_width for _ in range(img_height)]
-    output_3 = [[0] * img_width for _ in range(img_height)]
-    output_4 = [[0] * img_width for _ in range(img_height)]
-    output_5 = [[0] * img_width for _ in range(img_height)]
+    output_1 = np.zeros((5, 8, 8))
+    output_2 = np.zeros((5, 8, 8))
+    # for _ in range(5):
+    #     output_array = [[0] * img_width for _ in range(img_height)]
+    #     output_1.append(output_array)
+    #     output_2.append(output_array)
 
-    for i in range(img_height):
-        for j in range(img_width):
-            sum_val = 0
-            for ki in range(kernel_height):
-                for kj in range(kernel_width):
-                    sum_val += padded_img[i + ki][j + kj] * kernel[ki][kj]
-            output[i][j] = sum_val
-    # 2
-    for i in range(img_height):
-        for j in range(img_width):
-            sum_val = 0
-            for ki in range(kernel_height):
-                for kj in range(kernel_width):
-                    sum_val += padded_img[i + ki][j + kj] * kernel_2[ki][kj]
-            output_2[i][j] = sum_val
-    # 3
-    for i in range(img_height):
-        for j in range(img_width):
-            sum_val = 0
-            for ki in range(kernel_height):
-                for kj in range(kernel_width):
-                    sum_val += padded_img[i + ki][j + kj] * kernel_3[ki][kj]
-            output_3[i][j] = sum_val
-    # 4
-    for i in range(img_height):
-        for j in range(img_width):
-            sum_val = 0
-            for ki in range(kernel_height):
-                for kj in range(kernel_width):
-                    sum_val += padded_img[i + ki][j + kj] * kernel_4[ki][kj]
-            output_4[i][j] = sum_val
-    # 5
-    for i in range(img_height):
-        for j in range(img_width):
-            sum_val = 0
-            for ki in range(kernel_height):
-                for kj in range(kernel_width):
-                    sum_val += padded_img[i + ki][j + kj] * kernel_5[ki][kj]
-            output_5[i][j] = sum_val
+    for oc in range(5):
+        for i in range(img_height):
+            for j in range(img_width):
+                sum_val = 0
+                for ki in range(kernel_height):
+                    for kj in range(kernel_width):
+                        sum_val += padded_img_1[i + ki][j + kj] * kernel_1[oc][ki][kj]
+                output_1[oc][i][j] = sum_val
 
-    output = np.array(output)
+    for oc in range(5):
+        for i in range(img_height):
+            for j in range(img_width):
+                sum_val = 0
+                for ki in range(kernel_height):
+                    for kj in range(kernel_width):
+                        sum_val += padded_img_2[i + ki][j + kj] * kernel_2[oc][ki][kj]
+                output_2[oc][i][j] = sum_val
+
+    result = np.zeros((5, 8, 8))
+    for oc in range(5):
+        for i in range(8):
+            for j in range(8):
+                result[oc][i][j] = output_1[oc][i][j] + output_2[oc][i][j]
+
+    output_1 = np.array(output_1)
     output_2 = np.array(output_2)
-    output_3 = np.array(output_3)
-    output_4 = np.array(output_4)
-    output_5 = np.array(output_5)
 
     write_config(in_fd, K, M, N)
 
-    padded_img = np.array(padded_img)
-    write_matrix(in_fd, padded_img)
-    write_matrix(in_fd, kernel)
-    write_matrix(in_fd, kernel_2)
-    write_matrix(in_fd, kernel_3)
-    write_matrix(in_fd, kernel_4)
-    write_matrix(in_fd, kernel_5)
-    write_output_matrix(in_fd, output)
-    write_output_matrix(in_fd, output_2)
-    write_output_matrix(in_fd, output_3)
-    write_output_matrix(in_fd, output_4)
-    write_output_matrix(in_fd, output_5)
+    padded_img_1 = np.array(padded_img_1)
+    padded_img_2 = np.array(padded_img_2)
 
+    write_matrix(in_fd, padded_img_1)
+    write_matrix(in_fd, padded_img_2)
+    for i in range(5):
+        write_matrix(in_fd, kernel_1[i])
+    for i in range(5):
+        write_matrix(in_fd, kernel_2[i])
+    for i in range(5):
+        write_output_matrix(in_fd, output_1[i])
+    for i in range(5):
+        write_output_matrix(in_fd, output_2[i])
+    for i in range(5):
+        write_output_matrix(in_fd, result[i])
+    # write_matrix(in_fd, kernel)
+    # write_output_matrix(in_fd, output)
+    # write_output_matrix(in_fd, output_2)
+    # write_output_matrix(in_fd, output_3)
+    # write_output_matrix(in_fd, output_4)
+    # write_output_matrix(in_fd, output_5)
 
     c_fd.write("----------------------------------------------\n")
     c_fd.write(f"                 Case {i}                    \n")
     c_fd.write("----------------------------------------------\n")
     c_fd.write(f"K: {K:3d} M: {M:3d} N:{N:3d}\n")
-    write_readable(c_fd, padded_img, desc="A: \n")
-    write_readable(c_fd, kernel, desc ="B: \n")
-    write_readable(c_fd, kernel_2, desc ="B: \n")
-    write_readable(c_fd, kernel_3, desc ="B: \n")
-    write_readable(c_fd, kernel_4, desc ="B: \n")
-    write_readable(c_fd, kernel_5, desc ="B: \n")
-    write_readable(c_fd, output, desc="C: \n")
-    write_readable(c_fd, output_2, desc="C: \n")
-    write_readable(c_fd, output_3, desc="C: \n")
-    write_readable(c_fd, output_4, desc="C: \n")
-    write_readable(c_fd, output_5, desc="C: \n")
+    write_readable(c_fd, padded_img_1, desc="A: \n")
+    write_readable(c_fd, padded_img_2, desc="A: \n")
+    
+    for i in range(5):
+        write_readable(c_fd, kernel_1[i], desc ="B: \n")
+    for i in range(5):
+        write_readable(c_fd, kernel_2[i], desc ="B: \n")
+    # write_readable(c_fd, kernel_2, desc ="B: \n")
+    # write_readable(c_fd, kernel_3, desc ="B: \n")
+    # write_readable(c_fd, kernel_4, desc ="B: \n")
+    # write_readable(c_fd, kernel_5, desc ="B: \n")
+    for i in range(5):
+        write_readable(c_fd, output_1[i], desc="C: \n")
+    for i in range(5):
+        write_readable(c_fd, output_2[i], desc="C: \n")
+    for i in range(5):
+        write_readable(c_fd, result[i], desc="C: \n")
+    # write_readable(c_fd, output, desc="C: \n")
+    # write_readable(c_fd, output_2, desc="C: \n")
+    # write_readable(c_fd, output_3, desc="C: \n")
+    # write_readable(c_fd, output_4, desc="C: \n")
+    # write_readable(c_fd, output_5, desc="C: \n")
 
 
 def main():

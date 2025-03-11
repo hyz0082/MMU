@@ -233,13 +233,19 @@ end
 //#     STORE R_DATA      #
 //#########################
 always_ff @( posedge clk_i ) begin
-    if(r_valid) begin
+    if(pe_cmd_valid && pe_cmd == RESET) begin
+        r_valid_reg <= 1;
+    end
+    else if(r_valid) begin
         r_data_reg  <= r_data;
         r_valid_reg <= r_valid;
     end
     else if(pe_cmd_valid && pe_cmd == LOAD_DATA) begin
         r_data_reg  <= preload_data_in;
         r_valid_reg <= 1;
+    end
+    else begin
+        r_valid_reg <= 0;
     end
 end
 

@@ -1,0 +1,109 @@
+module data_feeder 
+#( parameter XLEN = 32, 
+   parameter BUF_ADDR_LEN = 32, 
+   parameter BRAM_ADDR_LEN = 10,
+   parameter ACLEN  = 8,
+   parameter DATA_WIDTH = 32)
+(
+    input                           clk_i,
+    input                           rst_i,
+
+    input                           S_DEVICE_strobe_i, 
+    input [BUF_ADDR_LEN-1 : 0]      S_DEVICE_addr_i,
+    input                           S_DEVICE_rw_i,
+    input [XLEN/8-1 : 0]            S_DEVICE_byte_enable_i,
+    input [XLEN-1 : 0]              S_DEVICE_data_i,
+
+    // to aquila
+    output logic                      S_DEVICE_ready_o,
+    output logic [XLEN-1 : 0]             S_DEVICE_data_o
+);
+
+localparam TPU_CMD_ADDR = 32'hC4000000;
+localparam PARAM_1_ADDR = 32'hC4000004;
+localparam PARAM_2_ADDR = 32'hC4000008;
+localparam BUSY_ADDR    = 32'hC4000020;
+localparam RET_ADDR     = 32'hC4000010;
+
+// 0xC4000000
+(* mark_debug="true" *)logic                        tpu_cmd_valid;     // tpu valid
+(* mark_debug="true" *)logic   [ACLEN-1 : 0]        tpu_cmd;
+(* mark_debug="true" *)logic  [DATA_WIDTH-1 : 0] S_DEVICE_data_i_t;
+assign S_DEVICE_data_i_t = S_DEVICE_data_i;
+// 0xC4000004
+(* mark_debug="true" *)logic   [DATA_WIDTH-1 : 0]   tpu_param_1_in;    // data 1
+// 0xC4000008
+(* mark_debug="true" *)logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in;     // data 2
+
+(* mark_debug="true" *)logic                      ret_valid;
+(* mark_debug="true" *)logic   [DATA_WIDTH-1 : 0] ret_data_out;
+// 0xC400000A
+(* mark_debug="true" *) logic                      tpu_busy;     // 0->idle, 1->busy
+// 0xC4000010
+logic   [DATA_WIDTH-1 : 0] ret_data_out_reg;
+
+always_ff @( posedge clk_i ) begin
+    if(ret_valid) begin
+        ret_data_out_reg <= ret_data_out;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        S_DEVICE_data_o  <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == BUSY_ADDR) begin
+        S_DEVICE_data_o  <= tpu_busy;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_ADDR) begin
+        S_DEVICE_data_o  <= ret_data_out_reg;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        S_DEVICE_ready_o <= 0;
+    end
+    else if(S_DEVICE_strobe_i) begin
+        S_DEVICE_ready_o <= 1;
+    end
+    else begin
+        S_DEVICE_ready_o <= 0;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        tpu_cmd_valid  <= 0;
+        tpu_cmd        <= 0;
+        tpu_param_1_in <= 0;
+        tpu_param_2_in <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == TPU_CMD_ADDR) begin
+        tpu_cmd_valid <= 1;
+        tpu_cmd  <= S_DEVICE_data_i;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == PARAM_1_ADDR) begin
+        tpu_param_1_in <= S_DEVICE_data_i;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == PARAM_2_ADDR) begin
+        tpu_param_2_in <= S_DEVICE_data_i;
+    end
+    else begin
+        tpu_cmd_valid <= 0;
+    end
+end
+
+TPU t1
+(
+    clk_i, rst_i,
+    tpu_cmd_valid,     // tpu valid
+    tpu_cmd,           // tpu
+    tpu_param_1_in,    // data 1
+    tpu_param_2_in,     // data 2
+    ret_valid,
+    ret_data_out,
+    tpu_busy     
+);
+
+endmodule

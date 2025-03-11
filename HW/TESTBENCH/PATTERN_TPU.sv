@@ -66,7 +66,9 @@ logic                      tpu_busy;     // 0->idle, 1->busy
 reg [127:0] GOLDEN [65535:0];
 
 logic [31:0] A_matrix [0:288] [0:288];
-logic [31:0] W_matrix [0:4] [0:288] [0:288];
+logic [31:0] W_matrix [0:4] [0:2] [0:2];
+logic [31:0] A_matrix_2 [0:288] [0:288];
+logic [31:0] W_matrix_2 [0:4] [0:2] [0:2];
 logic [31:0] C_matrix_golden [0:4] [0:288] [0:288];
 logic [31:0] C_matrix [0:288] [0:288];
 
@@ -124,7 +126,7 @@ initial begin
     //* PATNUM
     dummy_var_for_iverilog = $fscanf(in_fd, "%d", PATNUM);
 
-    // for(patcount = 0; patcount < PATNUM; patcount = patcount + 1) begin
+    for(patcount = 0; patcount < PATNUM; patcount = patcount + 1) begin
 
         //* read input
         read_KMN;
@@ -150,7 +152,20 @@ initial begin
         trigger_conv_cmd;
 
         wait_finished;
+
+        // second round
+        reset_cmd_task;
+
+        set_preload_cmd;
         
+        set_conv_cmd;
+
+        send_data_2;
+        
+        trigger_conv_cmd;
+        
+        wait_finished;
+
         golden_check;
         // $finish;
 
@@ -158,7 +173,7 @@ initial begin
         total_cycles = total_cycles + cycles;
         cycles = 0;
         repeat(5) @(negedge clk_i);
-    // end
+    end
 
     YOU_PASS_task;
     $finish;
@@ -225,7 +240,15 @@ task read_A_Matrix; begin
     for(i = 0; i < 10; i++) begin
         for(j = 0; j < 10; j++) begin
             dummy_var_for_iverilog = $fscanf(in_fd, "%h", rbuf);
+            // $display("A[%3d][%3d] = %x", i, j, rbuf);
             A_matrix[i][j] = rbuf;   
+        end 
+    end
+
+    for(i = 0; i < 10; i++) begin
+        for(j = 0; j < 10; j++) begin
+            dummy_var_for_iverilog = $fscanf(in_fd, "%h", rbuf);
+            A_matrix_2[i][j] = rbuf;   
         end 
     end
 end endtask
@@ -238,7 +261,17 @@ task read_W_Matrix; begin
         for(i = 0; i < 3; i++) begin
             for(j = 0; j < 3; j++) begin
                 dummy_var_for_iverilog = $fscanf(in_fd, "%h", rbuf);
+                // $display("golden[%3d][%3d][%3d] = %x", m, i, j, rbuf);
                 W_matrix[m][i][j] = rbuf;   
+            end 
+        end
+    end
+
+    for (int m = 0; m < 5; m++) begin
+        for(i = 0; i < 3; i++) begin
+            for(j = 0; j < 3; j++) begin
+                dummy_var_for_iverilog = $fscanf(in_fd, "%h", rbuf);
+                W_matrix_2[m][i][j] = rbuf;   
             end 
         end
     end
@@ -248,6 +281,25 @@ task read_golden; begin
     logic [31:0] rbuf;
 
     integer i, j;
+    // skip mid output
+    for(int m = 0; m < 5; m++) begin
+        for(i = 0; i < 8; i++) begin
+            for(j = 0; j < 8; j++) begin
+                dummy_var_for_iverilog = $fscanf(in_fd, "%h", rbuf);
+                C_matrix_golden[m][i][j] = rbuf;   
+            end 
+        end
+    end
+    // skip mid output
+    for(int m = 0; m < 5; m++) begin
+        for(i = 0; i < 8; i++) begin
+            for(j = 0; j < 8; j++) begin
+                dummy_var_for_iverilog = $fscanf(in_fd, "%h", rbuf);
+                C_matrix_golden[m][i][j] = rbuf;   
+            end 
+        end
+    end
+
     for(int m = 0; m < 5; m++) begin
         for(i = 0; i < 8; i++) begin
             for(j = 0; j < 8; j++) begin
@@ -309,6 +361,60 @@ task send_data; begin
 
     @(negedge clk_i);
     tpu_cmd_valid = 0;
+
+end endtask
+
+task send_data_2; begin
+
+    integer i, j, k;
+    integer c;
+    k = 0;
+    wait (!tpu_busy);
+    // send data
+    for(i = 0; i < 10; i++) begin
+        for(j = 0; j < 10; j++) begin
+            @(negedge clk_i);
+            tpu_param_1_in = A_matrix_2[i][j];
+            tpu_param_2_in = i * 10 + j;
+            tpu_cmd_valid = 1;
+            tpu_cmd = SW_WRITE_DATA;
+        end
+    end
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    // send weight
+    for(k = 0; k < 5; k++) begin
+        for(i = 0; i < 3; i++) begin
+            for(j = 0; j < 3; j++) begin
+                @(negedge clk_i);
+                tpu_param_1_in = W_matrix_2[k][i][j];
+                tpu_param_2_in = k * 9 + (i * 3 + j);
+                tpu_cmd_valid = 1;
+                tpu_cmd = SW_WRITE_WEIGHT;
+            end
+        end
+    end
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    
+    c = 0;
+    // for (i = 0; i < 8; i++) begin
+    //     for (j = 0; j < 8; j++) begin
+    //         for(int ki = 0; ki < 3; ki++) begin
+    //             for(int kj = 0; kj < 3; kj++) begin
+    //                 @(negedge clk_i);
+    //                 tpu_param_1_in = (i + ki) * 10 + (j + kj);
+    //                 tpu_param_2_in = c;
+    //                 tpu_cmd_valid = 1;
+    //                 tpu_cmd = SW_WRITE_I;
+    //                 c++;
+    //             end
+    //         end
+    //     end
+    // end
+
+    // @(negedge clk_i);
+    // tpu_cmd_valid = 0;
 
 end endtask
 
@@ -380,6 +486,18 @@ task reset_preload_cmd; begin
     integer i, j, k;
     @(negedge clk_i);
     tpu_param_1_in = 0;
+    tpu_cmd_valid = 1;
+    tpu_cmd = SET_PRELOAD;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    
+end endtask
+
+task set_preload_cmd; begin
+
+    integer i, j, k;
+    @(negedge clk_i);
+    tpu_param_1_in = 1;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_PRELOAD;
     @(negedge clk_i);
