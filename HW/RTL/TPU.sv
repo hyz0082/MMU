@@ -871,7 +871,7 @@ MMU M1
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(14),
+    .ADDR_BITS(15),
     .DATA_BITS(32)
     )
     gbuff (
@@ -891,7 +891,7 @@ endgenerate
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(14),
+    .ADDR_BITS(15),
     .DATA_BITS(32)
     )
     weight (
@@ -911,7 +911,7 @@ endgenerate
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(14),
+    .ADDR_BITS(15),
     .DATA_BITS(32)
     )
     I_gbuff (
@@ -931,7 +931,7 @@ endgenerate
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(12),
+    .ADDR_BITS(8),
     .DATA_BITS(128)
     )
     P_gbuff (
