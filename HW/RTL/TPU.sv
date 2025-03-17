@@ -110,6 +110,8 @@ typedef enum {IDLE_S, HW_RESET_S,
               WAIT_BN_S,
               STORE_BN_S,
               BN_INC_S,
+              BN_INC_2_S,
+              BN_INC_3_S,
               SET_MUL_VAL_S, 
               SET_ADD_VAL_S, 
               SET_PE_VAL_S, 
@@ -311,7 +313,9 @@ always_comb begin
                else next_state = WAIT_BN_S;
     STORE_BN_S: if(P_index_reg[0] == bn_len - 1) next_state = IDLE_S;
                 else next_state = BN_INC_S;
-    BN_INC_S: next_state = BN_S;
+    BN_INC_S: next_state = BN_INC_2_S;
+    BN_INC_2_S: next_state = BN_INC_3_S;
+    BN_INC_3_S: next_state = BN_S;
     SW_READ_DATA_S: next_state = OUTPUT_1_S;
     OUTPUT_1_S    : next_state = OUTPUT_2_S;
     OUTPUT_2_S    : next_state = OUTPUT_3_S;
