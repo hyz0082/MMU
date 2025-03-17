@@ -27,6 +27,11 @@ module TPU
     input   logic   [DATA_WIDTH-1 : 0]   tpu_param_1_in,    // data 1
     input   logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in,     // data 2
 
+    // partial load
+    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_in,
+    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in,
+    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_in,
+    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_in,
     /////////// DRAM input  ///////////////////////////////////////////////
     // input   logic   [DATA_WIDTH-1 : 0]   data_1_in,
     // input   logic   [DATA_WIDTH-1 : 0]   data_2_in,
@@ -85,9 +90,9 @@ localparam  SET_KMN           = 13; // partial
 //                                    // param_2_in: value
 localparam  SW_READ_DATA       = 14; // whole
 // localparam  SET_COL_IDX        = 15;
-localparam  SET_PRELOAD               = 15; // whole
-// localparam  IDLE               = 16; // whole
-
+localparam  SET_PRELOAD        = 15; // whole
+localparam  SW_WRITE_PARTIAL   = 16; // whole
+localparam  TRIGGER_BN   = 17; // whole
 
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
@@ -101,6 +106,10 @@ typedef enum {IDLE_S, HW_RESET_S,
               NEXT_ROW_S,
               NEXT_COL_S,
               PRELOAD_DATA_S,
+              BN_S,
+              WAIT_BN_S,
+              STORE_BN_S,
+              BN_INC_S,
               SET_MUL_VAL_S, 
               SET_ADD_VAL_S, 
               SET_PE_VAL_S, 
@@ -129,19 +138,8 @@ logic   [DATA_WIDTH-1 : 0]   param_1_in_reg;    // data 1
 logic   [DATA_WIDTH-1 : 0]   param_2_in_reg;    // data 2
 
 logic   [DATA_WIDTH*4-1 : 0] rdata_out [0 : 3];
-// logic   [DATA_WIDTH*4-1 : 0] rdata_1_out;
-// logic   [DATA_WIDTH*4-1 : 0] rdata_2_out;
-// logic   [DATA_WIDTH*4-1 : 0] rdata_3_out;
-// logic   [DATA_WIDTH*4-1 : 0] rdata_4_out; 
 
-// logic                        tpu_busy;     // 0->idle, 1->busy
 logic                        mmu_busy;     // 0->idle, 1->busy
-// logic   [DATA_WIDTH*4-1 : 0] mmu_out [0 : 3]; 
-// logic gbuff_sel; // 0-> TPU READ GBUFF A
-//                  //     SW / DRAM WRITE GBUFF B
-//                  // 1-> TPU READ GBUFF B
-//                  //     SW / DRAM WRITE GBUFF A
-
 
 //#########################
 //#    INDEX START REG    #
@@ -223,10 +221,29 @@ logic preload;
 
 logic [8:0] sa_in_cnt, sa_forward_cnt;
 
+//#########################
+//#    BN CTRL SIGNAL   #
+//#########################
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data [0 : 3];
+logic mode;
+logic   [ADDR_BITS-1  : 0]   bn_len;
+logic   [ADDR_BITS-1  : 0]   bn_cnt;
+logic   [DATA_WIDTH*4-1 : 0] bn_data_out [0 : 3];
+logic bn_valid;
+
 assign conv_end      = (row_acc + 4 >= M_reg && col_acc + 4 >= N_reg);
 assign conv_next_row = (row_acc + 4 < M_reg);
 assign conv_next_col = (col_acc + 4 < N_reg);
-// logic   [ADDR_BITS-1  : 0]   conv_len_cnt;
+
+always_ff @( posedge clk_i ) begin
+    if(tpu_cmd_valid && tpu_cmd == SET_CONV_MODE) begin
+        mode <= 0;
+    end
+    else if(tpu_cmd_valid && tpu_cmd == SET_FIX_MAC_MODE) begin
+        mode <= 1;
+        bn_len <= tpu_param_1_in;
+    end
+end
 
 always_ff @( posedge clk_i ) begin
     if(tpu_cmd_valid && tpu_cmd == SET_PRELOAD) begin
@@ -260,12 +277,13 @@ end
 always_comb begin
     case (curr_state)
     IDLE_S: if(tpu_cmd_valid && tpu_cmd == TRIGGER_CONV    ) next_state = LOAD_IDX_S;
-            else if(tpu_cmd_valid && tpu_cmd == SET_MUL_VAL     ) next_state = SET_MUL_VAL_S;
-            else if(tpu_cmd_valid && tpu_cmd == SET_ADD_VAL     ) next_state = SET_ADD_VAL_S;
-            else if(tpu_cmd_valid && tpu_cmd == SET_PE_VAL    ) next_state = SET_PE_VAL_S;
+            // else if(tpu_cmd_valid && tpu_cmd == SET_MUL_VAL     ) next_state = SET_MUL_VAL_S;
+            // else if(tpu_cmd_valid && tpu_cmd == SET_ADD_VAL     ) next_state = SET_ADD_VAL_S;
+            // else if(tpu_cmd_valid && tpu_cmd == SET_PE_VAL    ) next_state = SET_PE_VAL_S;
             // else if(tpu_cmd_valid && tpu_cmd == SET_CONV_MODE   ) next_state = SET_CONV_MODE_S;
             // else if(tpu_cmd_valid && tpu_cmd == SET_FIX_MAC_MODE) next_state = SET_FIX_MAC_MODE_S;
             else if(tpu_cmd_valid && tpu_cmd == SW_READ_DATA    ) next_state = SW_READ_DATA_S;
+            else if(tpu_cmd_valid && tpu_cmd == TRIGGER_BN    ) next_state = BN_S;
             else         next_state = IDLE_S;
     HW_RESET_S    : next_state = IDLE_S;
     LOAD_IDX_S    : next_state = PRELOAD_DATA_S;
@@ -288,6 +306,12 @@ always_comb begin
              else                   next_state = NEXT_COL_S;
     NEXT_ROW_S: next_state = PRELOAD_DATA_S;
     NEXT_COL_S: next_state = PRELOAD_DATA_S;
+    BN_S: next_state = WAIT_BN_S;
+    WAIT_BN_S: if(bn_valid) next_state = STORE_BN_S;
+               else next_state = WAIT_BN_S;
+    STORE_BN_S: if(P_index_reg[0] == bn_len - 1) next_state = IDLE_S;
+                else next_state = BN_INC_S;
+    BN_INC_S: next_state = BN_S;
     SW_READ_DATA_S: next_state = OUTPUT_1_S;
     OUTPUT_1_S    : next_state = OUTPUT_2_S;
     OUTPUT_2_S    : next_state = OUTPUT_3_S;
@@ -342,26 +366,6 @@ always_ff @(posedge clk_i) begin
     end
 end
 
-//#########################
-//#       STORE IDX       #
-//#########################
-// always_ff @(posedge clk_i) begin
-//     if(rst_i) begin
-//         store_idx[0] <= 0;
-//         store_idx[1] <= 0;
-//         store_idx[2] <= 0;
-//         store_idx[3] <= 0;
-//     end
-//     else if(tpu_cmd_valid && tpu_cmd == SET_ST_IDX) begin
-//         store_idx[tpu_param_1_in] <= tpu_param_2_in;
-//     end
-//     else if(curr_state == STORE_VAL_4_S) begin
-//         store_idx[0] <= store_idx[0] + 1;
-//         store_idx[1] <= store_idx[1] + 1;
-//         store_idx[2] <= store_idx[2] + 1;
-//         store_idx[3] <= store_idx[3] + 1;
-//     end
-// end
 
 //#########################
 //#      SEND OUTPUT      #
@@ -699,11 +703,14 @@ end
 //#########################
 always_comb begin
     for (int i = 0; i < 4; i++) begin
-        if(curr_state == STORE_S) begin
+        if(curr_state == STORE_S || curr_state == STORE_BN_S) begin
             P_status[i] = TPU_WRITE;
         end
         else if(tpu_cmd_valid_reg && tpu_cmd_reg == SW_READ_DATA) begin
             P_status[i] = SW_READ;
+        end
+        else if(tpu_cmd_valid_reg && tpu_cmd_reg == SW_WRITE_PARTIAL) begin
+            P_status[i] = SW_WRITE;
         end
         else begin
             P_status[i] = TPU_READ;
@@ -719,7 +726,7 @@ always_ff @(posedge clk_i)begin
         if(curr_state == IDLE_S) begin
             P_index_reg[i] <= 0;
         end
-        else if(curr_state == STORE_S) begin
+        else if(curr_state == STORE_S || curr_state == STORE_BN_S) begin
             P_index_reg[i] <= P_index_reg[i] + 1;
         end
     end
@@ -755,11 +762,28 @@ always_ff @(posedge clk_i) begin
 end
 
 //#########################
+//#      P DATA ST        #
+//#########################
+always_comb begin
+        tpu_data[0] <= tpu_data_1_in;
+        tpu_data[1] <= tpu_data_2_in;
+        tpu_data[2] <= tpu_data_3_in;
+        tpu_data[3] <= tpu_data_4_in;
+end
+
+//#########################
 //#      P DATA IN        #
 //#########################
 always_ff @(posedge clk_i) begin
     for (int i = 0; i < 4; i++) begin
-        P_data_in[i] <= rdata_out[i];
+        P_data_in[i] <= (P_status[i] == SW_READ   ) ? 0
+                      : (P_status[i] == SW_WRITE  ) ? tpu_data[i] 
+                      : (P_status[i] == TPU_READ  ) ? 0 
+                      : (P_status[i] == TPU_WRITE && mode == 0 ) ? rdata_out[i]
+                      : (P_status[i] == TPU_WRITE && mode == 1 ) ? bn_data_out[i]
+                      : (P_status[i] == DRAM_READ ) ? 0  
+                      : (P_status[i] == DRAM_WRITE) ? 0  
+                      : 0;
     end
 end
 
@@ -787,7 +811,8 @@ always_comb begin
        (curr_state == TRIGGER_S                             ) ||
        (curr_state == TRIGGER_LAST_S                        ) ||
        (curr_state == FORWARD_S                             ) ||
-       (curr_state == READ_DATA_2_S && preload)) begin
+       (curr_state == READ_DATA_2_S && preload)               ||
+       (curr_state == BN_S)) begin
         mmu_cmd_valid = 1; 
     end
     else begin
@@ -806,6 +831,9 @@ always_comb begin
     end
     else if(curr_state == READ_DATA_2_S) begin
         mmu_cmd = SET_PE_VAL;
+    end
+    else if(curr_state == BN_S) begin
+        mmu_cmd = TRIGGER_BN;
     end
     else begin
         mmu_cmd         = tpu_cmd_reg;
@@ -853,6 +881,18 @@ MMU M1
     .rdata_2_out(rdata_out[1]),
     .rdata_3_out(rdata_out[2]),
     .rdata_4_out(rdata_out[3]),
+
+    .bn_data_1_in(P_data_out_reg[0]),
+    .bn_data_2_in(P_data_out_reg[1]),
+    .bn_data_3_in(P_data_out_reg[2]),
+    .bn_data_4_in(P_data_out_reg[3]),
+
+    .bn_data_1_out(bn_data_out[0]),
+    .bn_data_2_out(bn_data_out[1]),
+    .bn_data_3_out(bn_data_out[2]),
+    .bn_data_4_out(bn_data_out[3]),
+    .bn_valid(bn_valid),
+
     .mmu_busy(mmu_busy)
 );
 //#########################

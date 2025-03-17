@@ -43,6 +43,8 @@ localparam  SET_ROW_IDX       = 12;
 localparam  SET_KMN           = 13;
 localparam  SW_READ_DATA      = 14; // whole
 localparam  SET_PRELOAD       = 15; // whole
+localparam  SW_WRITE_PARTIAL  = 16; // whole
+localparam  TRIGGER_BN        = 17; // whole
 
 /////////// System signals   ///////////////////////////////////////////////
 logic                      clk_i = 0;
@@ -82,7 +84,10 @@ integer in_fd, out_fd;
 integer patcount;
 integer err;
 integer PATNUM;
-
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_in;
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in;
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_in;
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_in;
 TPU t1
 (
     clk_i, rst_i,
@@ -90,6 +95,10 @@ TPU t1
     tpu_cmd,           // tpu
     tpu_param_1_in,    // data 1
     tpu_param_2_in,     // data 2
+    tpu_data_1_in,
+    tpu_data_2_in,
+    tpu_data_3_in,
+    tpu_data_4_in,
     ret_valid,
     ret_data_out,
     tpu_busy     
@@ -125,7 +134,25 @@ initial begin
 
     //* PATNUM
     dummy_var_for_iverilog = $fscanf(in_fd, "%d", PATNUM);
+    PATNUM = 0;
+    set_bn_cmd;
+    set_mul_cmd; //10
+    set_add_cmd; //10
+    sw_write_partial_cmd;
+    trigger_bn_cmd;
+    wait_finished;
 
+    @(negedge clk_i);
+    tpu_cmd_valid = 1;
+    tpu_param_1_in = 0;
+    tpu_param_2_in = 0;
+    tpu_cmd = SW_READ_DATA;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    wait (ret_valid);
+    $display("expect = %x", ret_data_out);
+    @(negedge clk_i);
+    $finish;
     for(patcount = 0; patcount < PATNUM; patcount = patcount + 1) begin
 
         //* read input
@@ -453,6 +480,18 @@ task set_conv_cmd; begin
 
 end endtask
 
+task set_bn_cmd; begin
+
+    integer i, j, k;
+    @(negedge clk_i);
+    tpu_param_1_in = 10;
+    tpu_cmd_valid = 1;
+    tpu_cmd = SET_FIX_MAC_MODE;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+
+end endtask
+
 task set_idx_cmd; begin
 
     integer i, j, k;
@@ -493,6 +532,47 @@ task reset_preload_cmd; begin
     
 end endtask
 
+task set_mul_cmd; begin
+
+    integer i, j, k;
+    @(negedge clk_i);
+    tpu_param_1_in = 0;
+    tpu_param_2_in = 32'h41200000;
+    tpu_cmd_valid = 1;
+    tpu_cmd = SET_MUL_VAL;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    
+end endtask
+
+task set_add_cmd; begin
+
+    integer i, j, k;
+    @(negedge clk_i);
+    tpu_param_1_in = 0;
+    tpu_param_2_in = 32'h41200000;
+    tpu_cmd_valid = 1;
+    tpu_cmd = SET_ADD_VAL;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    
+end endtask
+
+task sw_write_partial_cmd; begin
+
+    integer i, j, k;
+    @(negedge clk_i);
+    tpu_data_1_in = {32'h41200000, 32'h0, 32'h0, 32'h0};
+    // tpu_data_2_in,
+    // tpu_data_3_in,
+    // tpu_data_4_in,
+    tpu_cmd_valid = 1;
+    tpu_cmd = SW_WRITE_PARTIAL;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    
+end endtask
+
 task set_preload_cmd; begin
 
     integer i, j, k;
@@ -511,6 +591,17 @@ task trigger_conv_cmd; begin
     @(negedge clk_i);
     tpu_cmd_valid = 1;
     tpu_cmd = TRIGGER_CONV;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+    
+end endtask
+
+task trigger_bn_cmd; begin
+
+    integer i, j, k;
+    @(negedge clk_i);
+    tpu_cmd_valid = 1;
+    tpu_cmd = TRIGGER_BN;
     @(negedge clk_i);
     tpu_cmd_valid = 0;
     

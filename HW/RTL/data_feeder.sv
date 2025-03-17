@@ -19,11 +19,16 @@ module data_feeder
     output logic [XLEN-1 : 0]             S_DEVICE_data_o
 );
 
-localparam TPU_CMD_ADDR = 32'hC4000000;
-localparam PARAM_1_ADDR = 32'hC4000004;
-localparam PARAM_2_ADDR = 32'hC4000008;
-localparam BUSY_ADDR    = 32'hC4000020;
-localparam RET_ADDR     = 32'hC4000010;
+localparam TPU_CMD_ADDR  = 32'hC4000000;
+localparam PARAM_1_ADDR  = 32'hC4000004;
+localparam PARAM_2_ADDR  = 32'hC4000008;
+localparam BUSY_ADDR     = 32'hC4000020;
+localparam RET_ADDR      = 32'hC4000010;
+
+localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
+                                          32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
+                                          32'hC4001800, 32'hC4001900, 32'hC4001A00, 32'hC4001B00,
+                                          32'hC4001C00, 32'hC4001D00, 32'hC4001E00, 32'hC4001F00};
 
 // 0xC4000000
 (* mark_debug="true" *)logic                        tpu_cmd_valid;     // tpu valid
@@ -42,6 +47,13 @@ assign S_DEVICE_data_i_t = S_DEVICE_data_i;
 // 0xC4000010
 logic   [DATA_WIDTH-1 : 0] ret_data_out_reg;
 
+logic   [DATA_WIDTH-1 : 0] tpu_data_reg [0 : 15];
+
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_in;
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in;
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_in;
+logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_in;
+
 always_ff @( posedge clk_i ) begin
     if(ret_valid) begin
         ret_data_out_reg <= ret_data_out;
@@ -57,6 +69,17 @@ always_ff @( posedge clk_i ) begin
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_ADDR) begin
         S_DEVICE_data_o  <= ret_data_out_reg;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    for(int i = 0; i < 16; i++) begin
+        if(rst_i) begin
+            tpu_data_reg[i] <= 0;
+        end
+        else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == TPU_DATA_ADDR[i]) begin
+            tpu_data_reg[i]  <= S_DEVICE_data_i;
+        end
     end
 end
 
@@ -94,16 +117,30 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
+always_comb begin
+    tpu_data_1_in = {tpu_data_reg[0], tpu_data_reg[4], tpu_data_reg[8] , tpu_data_reg[12]};
+    tpu_data_2_in = {tpu_data_reg[1], tpu_data_reg[5], tpu_data_reg[9] , tpu_data_reg[13]};
+    tpu_data_3_in = {tpu_data_reg[2], tpu_data_reg[6], tpu_data_reg[10], tpu_data_reg[14]};
+    tpu_data_4_in = {tpu_data_reg[3], tpu_data_reg[7], tpu_data_reg[11], tpu_data_reg[15]};
+    
+end
+
 TPU t1
 (
-    clk_i, rst_i,
-    tpu_cmd_valid,     // tpu valid
-    tpu_cmd,           // tpu
-    tpu_param_1_in,    // data 1
-    tpu_param_2_in,     // data 2
-    ret_valid,
-    ret_data_out,
-    tpu_busy     
+    .clk_i(clk_i), .rst_i(rst_i),
+    .tpu_cmd_valid(tpu_cmd_valid),     // tpu valid
+    .tpu_cmd(tpu_cmd),           // tpu
+    .tpu_param_1_in(tpu_param_1_in),    // data 1
+    .tpu_param_2_in(tpu_param_2_in),     // data 2
+    
+    .tpu_data_1_in(tpu_data_1_in),
+    .tpu_data_2_in(tpu_data_2_in),
+    .tpu_data_3_in(tpu_data_3_in),
+    .tpu_data_4_in(tpu_data_4_in),
+    
+    .ret_valid(ret_valid),
+    .ret_data_out(ret_data_out),
+    .tpu_busy(tpu_busy)     
 );
 
 endmodule

@@ -22,7 +22,7 @@
 `define CYCLE_TIME 20.0
 
 module tb
-#(parameter ACLEN  = 4,
+#(parameter ACLEN  = 8,
   parameter DATA_WIDTH = 32
 //   parameter CLSIZE = `CLP
 )

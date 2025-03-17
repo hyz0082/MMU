@@ -8,7 +8,7 @@
 // =============================================================================
 // `include "config.vh"
 module MMU
-#(parameter ACLEN  = 4,
+#(parameter ACLEN  = 8,
   parameter DATA_WIDTH = 32
 //   parameter CLSIZE = `CLP
 )
@@ -36,7 +36,18 @@ module MMU
     output  logic   [DATA_WIDTH*4-1 : 0] rdata_1_out,
     output  logic   [DATA_WIDTH*4-1 : 0] rdata_2_out,
     output  logic   [DATA_WIDTH*4-1 : 0] rdata_3_out,
-    output  logic   [DATA_WIDTH*4-1 : 0] rdata_4_out, 
+    output  logic   [DATA_WIDTH*4-1 : 0] rdata_4_out,
+
+    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_1_in,
+    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_2_in,
+    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_3_in,
+    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_4_in,
+
+    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_1_out,
+    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_2_out,
+    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_3_out,
+    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_4_out,
+    output  logic   bn_valid,
 
     output  logic                        mmu_busy     // 0 for idle, 1 for busy
 );
@@ -62,7 +73,7 @@ localparam  SET_PE_VAL        = 5; // partial
 localparam  SET_CONV_MODE     = 6; // whole
 localparam  SET_FIX_MAC_MODE  = 7; // whole
 localparam  FORWARD              = 8; // whole
-
+localparam  TRIGGER_BN   = 17; // whole
 
 logic [DATA_WIDTH-1 : 0] row_1_reg;
 logic [DATA_WIDTH-1 : 0] row_2_reg [0:1];
@@ -91,10 +102,27 @@ logic column_select [0:3];
 
 logic   [DATA_WIDTH*4-1 : 0] params [0 : 3];
 
+logic   [DATA_WIDTH*4-1 : 0] bn_in  [0 : 3];
+logic   [DATA_WIDTH-1   : 0] bn_out [0 : 15];
+logic                        pe_bn_valid [0 : 15];
+
+
 assign params[0] = param_1_in;
 assign params[1] = param_2_in;
 assign params[2] = param_3_in;
 assign params[3] = param_4_in;
+
+assign bn_in[0] = bn_data_1_in;
+assign bn_in[1] = bn_data_2_in;
+assign bn_in[2] = bn_data_3_in;
+assign bn_in[3] = bn_data_4_in;
+
+assign bn_data_1_out = {bn_out[0], bn_out[4], bn_out[8] , bn_out[12]};
+assign bn_data_2_out = {bn_out[1], bn_out[5], bn_out[9] , bn_out[13]};
+assign bn_data_3_out = {bn_out[2], bn_out[6], bn_out[10], bn_out[14]};
+assign bn_data_4_out = {bn_out[3], bn_out[7], bn_out[11], bn_out[15]};
+
+assign bn_valid = pe_bn_valid[0];
 
 assign whole_pe_select = (mmu_cmd == RESET)            || 
                          (mmu_cmd == TRIGGER)          ||
@@ -102,14 +130,18 @@ assign whole_pe_select = (mmu_cmd == RESET)            ||
                          (mmu_cmd == SET_CONV_MODE)    || 
                          (mmu_cmd == SET_FIX_MAC_MODE) || 
                          (mmu_cmd == FORWARD)          ||
-                         (mmu_cmd == SET_PE_VAL);
+                         (mmu_cmd == SET_PE_VAL)       ||
+                         (mmu_cmd == TRIGGER_BN );
 
 assign column_select[0] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 0) ||
                           (mmu_cmd == SET_ADD_VAL) && (param_1_in == 0);
+
 assign column_select[1] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 1) ||
                           (mmu_cmd == SET_ADD_VAL) && (param_1_in == 1);
+
 assign column_select[2] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 2) ||
                           (mmu_cmd == SET_ADD_VAL) && (param_1_in == 2);
+
 assign column_select[3] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 3) ||
                           (mmu_cmd == SET_ADD_VAL) && (param_1_in == 3);
 always_comb begin : PE_VALID
@@ -231,7 +263,10 @@ generate
                          .data_out(data_out[0]), 
                          .weight_out(weight_out[0]),
                          .mac_value(mac_value[0]),
-                         .busy(pe_busy[0])
+                         .busy(pe_busy[0]),
+                         .bn_in(bn_in[0][127 : 96]),
+                         .bn_out(bn_out[0]),
+                         .bn_valid(pe_bn_valid[0])
                      );
               end
               else if (i == 1 || i == 2 || i == 3) begin
@@ -248,7 +283,10 @@ generate
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
-                         .busy(pe_busy[i])
+                         .busy(pe_busy[i]),
+                         .bn_in(bn_in[i][127 : 96]),
+                         .bn_out(bn_out[i]),
+                         .bn_valid(pe_bn_valid[i])
                      );
               end
               else if (i == 4 || i == 8 || i == 12) begin
@@ -265,7 +303,10 @@ generate
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
-                         .busy(pe_busy[i])
+                         .busy(pe_busy[i]),
+                         .bn_in(bn_in[0][127-(32*(i/4)) : 96-(32*(i/4))]),
+                         .bn_out(bn_out[i]),
+                         .bn_valid(pe_bn_valid[i])
                      );
               end
               else begin
@@ -282,7 +323,10 @@ generate
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
-                         .busy(pe_busy[i])
+                         .busy(pe_busy[i]),
+                         .bn_in(bn_in[i%4][127-(32*(i/4)) : 96-(32*(i/4))]),
+                         .bn_out(bn_out[i]),
+                         .bn_valid(pe_bn_valid[i])
                      );
               end
        end
