@@ -308,12 +308,13 @@ end
 //#########################
 //#          BN           #
 //#########################
-assign bn_valid = r_valid;
+// assign bn_valid = r_valid;
 
 always_ff @( posedge clk_i ) begin
     if(r_valid) begin
         bn_out <= r_data;
     end
+    bn_valid <= r_valid;
 end
 
 `ifdef VIVADO_ENV
