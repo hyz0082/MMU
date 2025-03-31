@@ -24,6 +24,7 @@ localparam PARAM_1_ADDR  = 32'hC4000004;
 localparam PARAM_2_ADDR  = 32'hC4000008;
 localparam BUSY_ADDR     = 32'hC4000020;
 localparam RET_ADDR      = 32'hC4000010;
+localparam RET_MAX_POOLING_ADDR      = 32'hC4002010;
 
 localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
                                           32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
@@ -42,6 +43,7 @@ assign S_DEVICE_data_i_t = S_DEVICE_data_i;
 
 (* mark_debug="true" *)logic                      ret_valid;
 (* mark_debug="true" *)logic   [DATA_WIDTH-1 : 0] ret_data_out;
+(* mark_debug="true" *)logic   [DATA_WIDTH-1 : 0] ret_max_pooling;
 // 0xC400000A
 (* mark_debug="true" *) logic                      tpu_busy;     // 0->idle, 1->busy
 // 0xC4000010
@@ -70,6 +72,10 @@ always_ff @( posedge clk_i ) begin
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_ADDR) begin
         S_DEVICE_data_o  <= ret_data_out_reg;
     end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_MAX_POOLING_ADDR) begin
+        S_DEVICE_data_o  <= ret_max_pooling;
+    end
+    // RET_MAX_POOLING_ADDR
 end
 
 always_ff @( posedge clk_i ) begin
@@ -140,6 +146,7 @@ TPU t1
     
     .ret_valid(ret_valid),
     .ret_data_out(ret_data_out),
+    .ret_max_pooling(ret_max_pooling),
     .tpu_busy(tpu_busy)     
 );
 

@@ -45,6 +45,7 @@ localparam  SW_READ_DATA      = 14; // whole
 localparam  SET_PRELOAD       = 15; // whole
 localparam  SW_WRITE_PARTIAL  = 16; // whole
 localparam  TRIGGER_BN        = 17; // whole
+localparam  SET_MAX_POOLING   = 18;
 
 /////////// System signals   ///////////////////////////////////////////////
 logic                      clk_i = 0;
@@ -62,6 +63,7 @@ logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in;     // data 2
 
 logic                      ret_valid;
 logic   [DATA_WIDTH-1 : 0] ret_data_out;
+logic   [DATA_WIDTH-1 : 0] ret_max_out;
 logic                      tpu_busy;     // 0->idle, 1->busy
 
 
@@ -101,6 +103,7 @@ TPU t1
     tpu_data_4_in,
     ret_valid,
     ret_data_out,
+    ret_max_out,
     tpu_busy     
 );
 
@@ -136,21 +139,23 @@ initial begin
     dummy_var_for_iverilog = $fscanf(in_fd, "%d", PATNUM);
     PATNUM = 0;
     set_bn_cmd;
+    set_max_pooling_cmd;
     set_mul_cmd; //10
     set_add_cmd; //10
     sw_write_partial_cmd;
     trigger_bn_cmd;
     wait_finished;
 
-    @(negedge clk_i);
-    tpu_cmd_valid = 1;
-    tpu_param_1_in = 0;
-    tpu_param_2_in = 0;
-    tpu_cmd = SW_READ_DATA;
-    @(negedge clk_i);
-    tpu_cmd_valid = 0;
-    wait (ret_valid);
-    $display("expect = %x", ret_data_out);
+    // @(negedge clk_i);
+    // tpu_cmd_valid = 1;
+    // tpu_param_1_in = 0;
+    // tpu_param_2_in = 0;
+    // tpu_cmd = SW_READ_DATA;
+    // @(negedge clk_i);
+    // tpu_cmd_valid = 0;
+    // wait (ret_valid);
+    $display("got = %x", ret_max_out);
+    $finish;
     @(negedge clk_i);
 
     @(negedge clk_i);
@@ -495,9 +500,20 @@ task set_bn_cmd; begin
 
     integer i, j, k;
     @(negedge clk_i);
-    tpu_param_1_in = 2;
+    tpu_param_1_in = 1;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_FIX_MAC_MODE;
+    @(negedge clk_i);
+    tpu_cmd_valid = 0;
+
+end endtask
+
+task set_max_pooling_cmd; begin
+
+    integer i, j, k;
+    @(negedge clk_i);
+    tpu_cmd_valid = 1;
+    tpu_cmd = SET_MAX_POOLING;
     @(negedge clk_i);
     tpu_cmd_valid = 0;
 
@@ -548,28 +564,28 @@ task set_mul_cmd; begin
     integer i, j, k;
     @(negedge clk_i);
     tpu_param_1_in = 0;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h3f800000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_MUL_VAL;
     @(negedge clk_i);
     tpu_cmd_valid = 0;
     @(negedge clk_i);
     tpu_param_1_in = 1;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h3f800000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_MUL_VAL;
     @(negedge clk_i);
     tpu_cmd_valid = 0;
     @(negedge clk_i);
     tpu_param_1_in = 2;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h3f800000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_MUL_VAL;
     @(negedge clk_i);
     tpu_cmd_valid = 0;
     @(negedge clk_i);
     tpu_param_1_in = 3;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h3f800000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_MUL_VAL;
     @(negedge clk_i);
@@ -582,7 +598,7 @@ task set_add_cmd; begin
     integer i, j, k;
     @(negedge clk_i);
     tpu_param_1_in = 0;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h00000000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_ADD_VAL;
     @(negedge clk_i);
@@ -590,7 +606,7 @@ task set_add_cmd; begin
 
     @(negedge clk_i);
     tpu_param_1_in = 1;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h00000000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_ADD_VAL;
     @(negedge clk_i);
@@ -598,7 +614,7 @@ task set_add_cmd; begin
 
     @(negedge clk_i);
     tpu_param_1_in = 2;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h00000000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_ADD_VAL;
     @(negedge clk_i);
@@ -606,7 +622,7 @@ task set_add_cmd; begin
 
     @(negedge clk_i);
     tpu_param_1_in = 3;
-    tpu_param_2_in = 32'h41200000;
+    tpu_param_2_in = 32'h00000000;
     tpu_cmd_valid = 1;
     tpu_cmd = SET_ADD_VAL;
     @(negedge clk_i);
@@ -618,21 +634,38 @@ task sw_write_partial_cmd; begin
 
     integer i, j, k;
     @(negedge clk_i);
-    tpu_data_1_in = {32'h41200000, 32'h0, 32'h0, 32'h0};
+    tpu_data_1_in = {32'h4048a4f0, 32'h40000000, 32'h40777e5a, 32'h0};
+    tpu_data_2_in = {32'h3f800000, 32'h0, 32'h0, 32'h0};
+    tpu_data_3_in = {32'h405b4841, 32'h0, 32'h0, 32'h0};
+    tpu_data_4_in = {32'h405b4841, 32'h0, 32'h0, 32'h0};
     tpu_param_2_in = 0;
-    // tpu_data_2_in,
-    // tpu_data_3_in,
-    // tpu_data_4_in,
+
     tpu_cmd_valid = 1;
     tpu_cmd = SW_WRITE_PARTIAL;
     @(negedge clk_i);
     tpu_cmd_valid = 0;
 
-    @(negedge clk_i);
-    tpu_data_1_in = {32'h41a00000, 32'h0, 32'h0, 32'h0};
-    tpu_param_2_in = 1;
-    tpu_cmd_valid = 1;
-    tpu_cmd = SW_WRITE_PARTIAL;
+    // @(negedge clk_i);
+    // tpu_data_1_in = {32'h41a00000, 32'h41a00000, 32'h0, 32'h0};
+    // tpu_param_2_in = 1;
+    // tpu_cmd_valid = 1;
+    // tpu_cmd = SW_WRITE_PARTIAL;
+    // @(negedge clk_i);
+    // tpu_cmd_valid = 0;
+
+    // @(negedge clk_i);
+    // tpu_data_1_in = {32'h40a00000, 32'h40c00000, 32'h0, 32'h0};
+    // tpu_param_2_in = 2;
+    // tpu_cmd_valid = 1;
+    // tpu_cmd = SW_WRITE_PARTIAL;
+    // @(negedge clk_i);
+    // tpu_cmd_valid = 0;
+
+    // @(negedge clk_i);
+    // tpu_data_1_in = {32'h40a00000, 32'h40c00000, 32'h0, 32'h0};
+    // tpu_param_2_in = 3;
+    // tpu_cmd_valid = 1;
+    // tpu_cmd = SW_WRITE_PARTIAL;
     @(negedge clk_i);
     tpu_cmd_valid = 0;
     @(negedge clk_i);

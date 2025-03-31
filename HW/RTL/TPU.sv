@@ -44,6 +44,8 @@ module TPU
     /////////// TPU outpupt ///////////////////////////////////////////////
     output  logic                      ret_valid,
     output  logic   [DATA_WIDTH-1 : 0] ret_data_out,
+
+    output  logic   [DATA_WIDTH-1 : 0] ret_max_pooling,
     // output  logic   [DATA_WIDTH*4-1 : 0] rdata_2_out,
     // output  logic   [DATA_WIDTH*4-1 : 0] rdata_3_out,
     // output  logic   [DATA_WIDTH*4-1 : 0] rdata_4_out, 
@@ -93,6 +95,7 @@ localparam  SW_READ_DATA       = 14; // whole
 localparam  SET_PRELOAD        = 15; // whole
 localparam  SW_WRITE_PARTIAL   = 16; // whole
 localparam  TRIGGER_BN   = 17; // whole
+localparam  SET_MAX_POOLING = 18; // whole
 
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
@@ -112,6 +115,7 @@ typedef enum {IDLE_S, HW_RESET_S,
               BN_INC_S,
               BN_INC_2_S,
               BN_INC_3_S,
+              WAIT_MAX_POOLING_S,
               SET_MUL_VAL_S, 
               SET_ADD_VAL_S, 
               SET_PE_VAL_S, 
@@ -232,6 +236,25 @@ logic   [ADDR_BITS-1  : 0]   bn_len;
 logic   [ADDR_BITS-1  : 0]   bn_cnt;
 logic   [DATA_WIDTH*4-1 : 0] bn_data_out [0 : 3];
 logic bn_valid;
+logic bn_valid_reg;
+
+//#########################
+//#  MAX POOLING SIGNAL   #
+//#########################
+logic enable_max_pooling;
+(* mark_debug="true" *) logic   [DATA_WIDTH-1 : 0] max_pooling_data [0 : 19];
+logic                      max_pooling_data_valid [0 : 20];
+logic   [7 : 0] cmp_result [0 : 20];
+logic                        cmp_result_valid [0 : 20];
+logic                        cmp_result_valid_reg [0 : 20];
+logic                        cmp_in_valid [0 : 20];
+// logic   [DATA_WIDTH-1 : 0  ] max_pooling_result;
+// 3x3
+// 1 2 3 4 5 6 7 8 9
+// 12 34 56 78 9 L1
+// 1234 5678 9   L2
+// 12345678 9    L3
+// 123456789     L4
 
 assign conv_end      = (row_acc + 4 >= M_reg && col_acc + 4 >= N_reg);
 assign conv_next_row = (row_acc + 4 < M_reg);
@@ -252,6 +275,19 @@ always_ff @( posedge clk_i ) begin
         preload <= tpu_param_1_in;
     end
     
+end
+
+// max pooling
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        enable_max_pooling <= 0;
+    end
+    else if(tpu_cmd_valid && tpu_cmd == RESET) begin
+        enable_max_pooling <= 0;
+    end
+    else if(tpu_cmd_valid && tpu_cmd == SET_MAX_POOLING) begin
+        enable_max_pooling <= 1;
+    end
 end
 
 // error
@@ -309,7 +345,8 @@ always_comb begin
     NEXT_ROW_S: next_state = PRELOAD_DATA_S;
     NEXT_COL_S: next_state = PRELOAD_DATA_S;
     BN_S: next_state = WAIT_BN_S;
-    WAIT_BN_S: if(bn_valid) next_state = STORE_BN_S;
+    WAIT_BN_S: if(bn_valid && !enable_max_pooling) next_state = STORE_BN_S;
+               else if(cmp_result_valid_reg[7] && enable_max_pooling) next_state = IDLE_S;
                else next_state = WAIT_BN_S;
     STORE_BN_S: if(P_index_reg[0] == bn_len - 1) next_state = IDLE_S;
                 else next_state = BN_INC_S;
@@ -906,8 +943,87 @@ MMU M1
 //#########################
 //    AVG / MAX POOLING
 //#########################
+always_ff @( posedge clk_i ) begin
+    bn_valid_reg <= bn_valid;
+    cmp_result_valid_reg <= cmp_result_valid;
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        for (int i = 0; i < 20; i++) begin
+            max_pooling_data[i] <= 0;
+        end
+    end
+    else if(bn_valid_reg) begin
+        max_pooling_data[0]  <= bn_data_out[0][(DATA_WIDTH*4-1)-:32];//[127:31];//DATA_WIDTH
+        max_pooling_data[1]  <= bn_data_out[1][(DATA_WIDTH*4-1)-:32];
+        max_pooling_data[2]  <= bn_data_out[2][(DATA_WIDTH*4-1)-:32];
+        max_pooling_data[3]  <= bn_data_out[3][(DATA_WIDTH*4-1)-:32];
+        max_pooling_data[4]  <= bn_data_out[0][(DATA_WIDTH*3-1)-:32];
+        max_pooling_data[5]  <= bn_data_out[1][(DATA_WIDTH*3-1)-:32];
+        max_pooling_data[6]  <= bn_data_out[2][(DATA_WIDTH*3-1)-:32];
+        max_pooling_data[7]  <= bn_data_out[3][(DATA_WIDTH*3-1)-:32];
+        max_pooling_data[15] <= bn_data_out[0][(DATA_WIDTH*2-1)-:32];
+    end
+    // 0 ~ 6
+    for(int i = 0; i < 7; i++) begin
+        if(cmp_result_valid_reg[i]) begin
+            max_pooling_data[i+8]  <= (cmp_result[i]==1) ? max_pooling_data[i*2] 
+                                                      : max_pooling_data[i*2+1];
+        end
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    for (int i = 0; i < 4; i++) begin
+        if(bn_valid) begin
+            cmp_in_valid[i] <= 1;
+        end
+        else begin
+            cmp_in_valid[i] <= 0;
+        end 
+    end
+    cmp_in_valid[4]  <= cmp_result_valid_reg[0];
+    cmp_in_valid[5]  <= cmp_result_valid_reg[2];
+
+    cmp_in_valid[6]  <= cmp_result_valid_reg[4];
+
+    cmp_in_valid[7] <= cmp_result_valid_reg[6];
 
 
+end
+
+// mid
+generate
+for (genvar i = 0; i < 7; i++) begin
+    floating_point_cmp cmp(
+        .aclk(clk_i),
+        .s_axis_a_tdata(max_pooling_data[i*2]),
+        .s_axis_a_tvalid(cmp_in_valid[i]),
+        .s_axis_b_tdata(max_pooling_data[i*2+1]),
+        .s_axis_b_tvalid(cmp_in_valid[i]),
+        .m_axis_result_tdata(cmp_result[i]),
+        .m_axis_result_tvalid(cmp_result_valid[i])
+    );
+end
+endgenerate
+// last
+floating_point_cmp cmp(
+        .aclk(clk_i),
+        .s_axis_a_tdata(max_pooling_data[14]),
+        .s_axis_a_tvalid(cmp_in_valid[7]),
+        .s_axis_b_tdata(max_pooling_data[15]),
+        .s_axis_b_tvalid(cmp_in_valid[7]),
+        .m_axis_result_tdata(cmp_result[7]),
+        .m_axis_result_tvalid(cmp_result_valid[7])
+    );
+
+always_ff @( posedge clk_i ) begin
+    if(cmp_result_valid_reg[7]) begin
+        ret_max_pooling  <= (cmp_result[7]==1) ? max_pooling_data[14] 
+                                               : max_pooling_data[15];
+    end
+end
 
 //#########################
 //#      LINE BUFFER      #
