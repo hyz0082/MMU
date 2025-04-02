@@ -46,6 +46,8 @@ module TPU
     output  logic   [DATA_WIDTH-1 : 0] ret_data_out,
 
     output  logic   [DATA_WIDTH-1 : 0] ret_max_pooling,
+    output  logic   [DATA_WIDTH-1 : 0] ret_softmax_result,
+    
     // output  logic   [DATA_WIDTH*4-1 : 0] rdata_2_out,
     // output  logic   [DATA_WIDTH*4-1 : 0] rdata_3_out,
     // output  logic   [DATA_WIDTH*4-1 : 0] rdata_4_out, 
@@ -96,6 +98,9 @@ localparam  SET_PRELOAD        = 15; // whole
 localparam  SW_WRITE_PARTIAL   = 16; // whole
 localparam  TRIGGER_BN   = 17; // whole
 localparam  SET_MAX_POOLING = 18; // whole
+localparam  SET_DIVISOR = 19; // whole
+localparam  SET_SOFTMAX = 20; // whole
+localparam  TRIGGER_SOFTMAX = 21; // whole
 
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
@@ -122,6 +127,8 @@ typedef enum {IDLE_S, HW_RESET_S,
               SET_CONV_MODE_S, 
               SET_FIX_MAC_MODE_S,
               SW_READ_DATA_S,
+              WAIT_SF_ACC_S,
+              WAIT_SF_S,
               OUTPUT_1_S,
               OUTPUT_2_S,
               OUTPUT_3_S} state_t;
@@ -242,7 +249,7 @@ logic bn_valid_reg;
 //#  MAX POOLING SIGNAL   #
 //#########################
 logic enable_max_pooling;
-(* mark_debug="true" *) logic   [DATA_WIDTH-1 : 0] max_pooling_data [0 : 19];
+logic   [DATA_WIDTH-1 : 0] max_pooling_data [0 : 19];
 logic                      max_pooling_data_valid [0 : 20];
 logic   [7 : 0] cmp_result [0 : 20];
 logic                        cmp_result_valid [0 : 20];
@@ -255,6 +262,21 @@ logic                        cmp_in_valid [0 : 20];
 // 1234 5678 9   L2
 // 12345678 9    L3
 // 123456789     L4
+//#########################
+//       SOFTMAX
+//#########################
+// divisor
+logic   [DATA_WIDTH-1 : 0]   divisor;
+logic   [DATA_WIDTH-1 : 0]   exp_acc, exp_acc_reg;
+logic                        exp_acc_valid, exp_acc_last;
+logic   [DATA_WIDTH-1 : 0]   exp_1_in, exp_2_in;
+logic   [DATA_WIDTH-1 : 0]   exp_1_out, exp_2_out;
+logic                        exp_1_out_valid, exp_2_out_valid;
+logic                        exp_1_out_valid_reg, exp_2_out_valid_reg;
+logic   [DATA_WIDTH-1 : 0]   exp_1_out_reg, exp_2_out_reg;
+// output
+logic   [DATA_WIDTH-1 : 0]   softmax_result;
+logic                        softmax_result_valid;
 
 assign conv_end      = (row_acc + 4 >= M_reg && col_acc + 4 >= N_reg);
 assign conv_next_row = (row_acc + 4 < M_reg);
@@ -322,6 +344,9 @@ always_comb begin
             // else if(tpu_cmd_valid && tpu_cmd == SET_FIX_MAC_MODE) next_state = SET_FIX_MAC_MODE_S;
             else if(tpu_cmd_valid && tpu_cmd == SW_READ_DATA    ) next_state = SW_READ_DATA_S;
             else if(tpu_cmd_valid && tpu_cmd == TRIGGER_BN    ) next_state = BN_S;
+            else if(tpu_cmd_valid && tpu_cmd == SET_SOFTMAX    ) next_state = WAIT_SF_ACC_S;
+            else if(tpu_cmd_valid && tpu_cmd == TRIGGER_SOFTMAX    ) next_state = WAIT_SF_S;
+            
             else         next_state = IDLE_S;
     HW_RESET_S    : next_state = IDLE_S;
     LOAD_IDX_S    : next_state = PRELOAD_DATA_S;
@@ -353,6 +378,10 @@ always_comb begin
     BN_INC_S: next_state = BN_INC_2_S;
     BN_INC_2_S: next_state = BN_INC_3_S;
     BN_INC_3_S: next_state = BN_S;
+    WAIT_SF_ACC_S: if(exp_acc_valid) next_state = IDLE_S;
+                   else next_state = WAIT_SF_ACC_S;
+    WAIT_SF_S: if(softmax_result_valid) next_state = IDLE_S;
+               else next_state = WAIT_SF_S;
     SW_READ_DATA_S: next_state = OUTPUT_1_S;
     OUTPUT_1_S    : next_state = OUTPUT_2_S;
     OUTPUT_2_S    : next_state = OUTPUT_3_S;
@@ -939,6 +968,67 @@ MMU M1
 //#########################
 //       SOFTMAX
 //#########################
+always_ff @( posedge clk_i ) begin
+    if(tpu_cmd_valid && tpu_cmd == SET_DIVISOR) begin
+        divisor <= tpu_data_1_in;
+    end
+end
+always_ff @( posedge clk_i ) begin
+    exp_1_out_reg       <= exp_1_out;
+    exp_2_out_reg       <= exp_2_out;
+    exp_1_out_valid_reg <= exp_1_out_valid;
+    exp_2_out_valid_reg <= exp_2_out_valid;
+
+end
+always_ff @( posedge clk_i ) begin
+    if(exp_acc_valid) begin
+        exp_acc_reg <= exp_acc;
+    end
+end
+always_ff @( posedge clk_i ) begin
+    if(softmax_result_valid) begin
+        ret_softmax_result <= softmax_result;
+    end
+end
+// exp 1
+floating_point_exp exp_1(
+        .aclk(clk_i),
+        .s_axis_a_tdata(tpu_param_1_in),
+        .s_axis_a_tvalid(tpu_cmd_valid && tpu_cmd == SET_SOFTMAX),
+        .m_axis_result_tdata(exp_1_out),
+        .m_axis_result_tvalid(exp_1_out_valid)
+);
+// exp 2
+floating_point_exp exp_2(
+        .aclk(clk_i),
+        .s_axis_a_tdata(tpu_param_1_in),
+        .s_axis_a_tvalid(tpu_cmd_valid && tpu_cmd == TRIGGER_SOFTMAX),
+        .m_axis_result_tdata(exp_2_out),
+        .m_axis_result_tvalid(exp_2_out_valid)
+);
+// acc
+floating_point_acc ACC(
+
+    .aclk(clk_i),
+
+    .s_axis_a_tdata(exp_1_out_reg),
+    .s_axis_a_tlast(tpu_param_2_in),
+    .s_axis_a_tvalid(exp_1_out_valid_reg),
+
+    .m_axis_result_tdata(exp_acc),
+    .m_axis_result_tlast(exp_acc_last),
+    .m_axis_result_tvalid(exp_acc_valid)
+);
+// divid
+floating_point_div div(
+        .aclk(clk_i),
+        .s_axis_a_tdata(exp_2_out_reg),
+        .s_axis_a_tvalid(exp_2_out_valid_reg),
+        .s_axis_b_tdata(exp_acc_reg),
+        .s_axis_b_tvalid(exp_2_out_valid_reg),
+        .m_axis_result_tdata(softmax_result),
+        .m_axis_result_tvalid(softmax_result_valid)
+    );
 
 //#########################
 //    AVG / MAX POOLING
