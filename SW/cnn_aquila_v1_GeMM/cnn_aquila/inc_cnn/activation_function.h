@@ -1,10 +1,12 @@
 #pragma once
-
+#include <math.h>
 #include "util.h"
 #include "config.h"
 #include <stdint.h>
 #include <stdlib.h>
-#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+
 
 static inline float_t identity(float_t *arr, uint64_t index, uint64_t out_dim)
 {
@@ -53,6 +55,20 @@ float my_exp_fp32(float x) {
 //     for (uint64_t i = 0; i < out_dim; i++)
 //         // denom += exp(arr[i] - max);
 //         denom += my_exp_fp32(arr[i] - max);
+//     return numer / denom;
+// }
+// static inline float_t softmax(float_t *arr, uint64_t index, uint64_t out_dim)
+// {
+//     float_t max = 0;
+//     for (uint64_t i = 0; i < out_dim; i++)
+//         if (arr[i] > max)
+//             max = arr[i];
+//     // float_t numer = exp(arr[index] - max);
+//     float_t numer = exp(arr[index] - max);
+//     float_t denom = 0;
+//     for (uint64_t i = 0; i < out_dim; i++)
+//         // denom += exp(arr[i] - max);
+//         denom += exp(arr[i] - max);
 //     return numer / denom;
 // }
 

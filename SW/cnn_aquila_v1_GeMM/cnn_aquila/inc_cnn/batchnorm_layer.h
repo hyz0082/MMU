@@ -11,7 +11,7 @@
 #include "activation_function.h"
 #include "hw_cmd.h"
 #include <time.h>
-
+#include <float.h>
 #ifndef USING_GEM5
 #include "loader.h"
 #endif
@@ -71,10 +71,12 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
 {
 #ifdef USING_GEM5
     clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
+    clock_t hardware_compute_time = 0;
     tick = clock();
 #endif
 
     batchnorm_layer *entry = get_batchnorm_layer_entry(ptr);
+    static int bn_cnt = 0;
     if (input->in_size_ != entry->base.in_size_)
     {
         if (hart_id == 0) 
@@ -109,7 +111,105 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
     reset_cmd();
     int max_len = 4096;
     set_bn_cmd(max_len/16);
+    if(bn_cnt == 0) {
+        
+        int pad_size = 114*114*64;
+        float_t *pad_ptr = (float_t *)malloc(pad_size * sizeof(float_t));
+        if (pad_ptr != NULL) { // Check if memory was allocated
+            memset((void*)pad_ptr, 0, pad_size * sizeof(float_t));
+        }
+        else {
+            printf("Error: Unable to allocate memory for pad_size\n");
+            exit(1);
+        }
+        float_t *dst = pad_ptr;
 
+        uint64_t total_size = 64 * 112;
+        
+        uint64_t end = total_size;
+        for (uint64_t i = 0; i < end; i++)
+        {
+            uint64_t c = i / 112;
+            uint64_t y = i % 112;
+            int pad_pos = (114 * c + (1 + y)) * 114 + 1;
+            float_t *pimg = &dst[pad_pos];
+            pad_pos = (112 * c + y) * 112 + 0;
+            const float_t *pin = &in[pad_pos];
+
+            for (uint64_t x = 0; x < 112; x++)
+            {
+                pimg[x] = pin[x];
+            }
+        }
+        // }
+        set_bn_cmd(1);
+        set_max_pooling_cmd();
+        for (uint64_t ch = 0; ch < in_.depth_; ch++){
+            float_t mul = _gamma(entry, ch) * _invstd(entry, ch);
+            float_t add = _gamma(entry, ch) * (- _mean(entry, ch)) * _invstd(entry, ch) + _beta(entry, ch);
+            send_bn_mul_data(mul, 0);
+            send_bn_mul_data(mul, 1);
+            send_bn_mul_data(mul, 2);
+            send_bn_mul_data(mul, 3);
+    
+            send_bn_add_data(add, 0);
+            send_bn_add_data(add, 1);
+            send_bn_add_data(add, 2);
+            send_bn_add_data(add, 3);
+            for(int y = 0; y < 56; y++) {
+                for(int x = 0; x < 56; x++) {
+                    int data_pos = 0;
+                    uint64_t base_pos = (ch * 114*114) + (y*114*2) + (x*2);
+                    if(x == 0 || y == 0) {
+                        float curr_max = (float_t)-DBL_MAX;
+                        for(int py = 0; py < 3; py++) {
+                            for(int px = 0; px < 3; px++) {
+                                if(x + px == 0 || y + py == 0) {
+                                    // if(ch==63 && x==55 && y==55) {
+                                    //     printf("continue\n");
+                                    // }
+                                    continue;
+                                }
+                                uint64_t target_pos = base_pos + py*114+px;
+                                curr_max = max(curr_max, pad_ptr[target_pos]*mul + add);
+                                // if(ch==63 && x==55 && y==55) {
+                                //     printf("pad_ptr[%d]=%f\n", (int)target_pos, pad_ptr[target_pos]);
+                                //     printf("ret=%f\n", pad_ptr[target_pos]*mul + add);
+                                // }
+                            }
+                        }
+                        curr_max = max(curr_max, (float_t)0);
+                        uint64_t pos = (ch*56*56) + (y*56) + x;
+                        in[pos] = curr_max;
+                    }
+                    else {
+                        for(int py = 0; py < 3; py++) {
+                            for(int px = 0; px < 3; px++) {
+                                uint64_t target_pos = base_pos + py*114+px;
+                                send_bn_data(pad_ptr[target_pos], data_pos++);
+                                // printf("send: %f\n", pad_ptr[target_pos]);
+                            }
+                        }
+                        write_bn_data(0);
+                        __asm__ volatile ("nop");
+                        trigger_bn_cmd();
+                        wait_idle_cmd();
+                        uint64_t pos = (ch*56*56) + (y*56) + x;
+                        in[pos] = read_max_pooling_cmd();
+                    }
+                    // printf("result: %f\n", in[pos]);
+                }
+            }
+        }
+        free(pad_ptr);
+#ifdef PRINT_LAYER
+    if (hart_id == 0) 
+    {
+        printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, in[0], in[1], in[56*56*64-2], in[56*56*64-1]);
+    }
+#endif
+    }
+    else 
     for (uint64_t ch = 0; ch < in_.depth_; ch++){
         float_t mul = _gamma(entry, ch) * _invstd(entry, ch);
         float_t add = _gamma(entry, ch) * (- _mean(entry, ch)) * _invstd(entry, ch) + _beta(entry, ch);
@@ -141,8 +241,15 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             // data_pos = 0;
             __asm__ volatile ("nop");
             ///
+#ifdef USING_GEM5
+            clock_t  tmp_tick = clock();
+#endif
             trigger_bn_cmd();
             wait_idle_cmd();
+#ifdef USING_GEM5
+            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+            // printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
+#endif
             int var[16] = {0, 4, 8 , 12,
                            1, 5, 9 , 13,
                            2, 6, 10, 14,
@@ -156,7 +263,6 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             }
         }
     }
-    // }
 
     total_size = entry->base.out_size_;
     blocksize = compute_block_size(total_size);
@@ -185,18 +291,18 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
     // for (int inc = 0; inc < in_.depth_; inc++) {
     //     printf("\n[depth%d]\n", inc);
     //     // const float_t *pi = &in[get_index(&in_padded_, 0, 0, inc)];
-    //     for (int h = 0; h < in_.height_; h++) {
+    //     for (int h = 0; h < 56; h++) {
     //         printf("%3d ", (h));
     //         printf("[ ");
-    //         for (uint64_t w = 0; w < in_.width_; w++) {
-    //             printf("%2.6f ", (out[p_cnt]));
+    //         for (uint64_t w = 0; w < 56; w++) {
+    //             printf("%2.6f ", (out[inc*(56*56) + h*56 + w]));
     //             p_cnt++;
     //         }
     //         printf("]\n");
     //     }
     // }
     //###########################################################
-
+    bn_cnt++;
 #ifdef PRINT_LAYER
     if (hart_id == 0) 
     {
@@ -207,6 +313,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
 #ifdef USING_GEM5
     tick = (clock() - tick)/ticks_per_msec;
     printf("It took %ld msec to perform batchNorm.\n\n", tick);
+    printf("It took %ld msec to perform BN_HW.\n\n", hardware_compute_time);
 #endif
 
 }

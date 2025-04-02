@@ -20,13 +20,20 @@
 #define  SET_PRELOAD        15
 #define  SW_WRITE_PARTIAL   16
 #define  TRIGGER_BN         17
+#define  SET_MAX_POOLING    18
+#define  SET_DIVISOR        19
+#define  SET_SOFTMAX        20
+#define  TRIGGER_SOFTMAX    21
 
 volatile unsigned int * TPU_CMD      = (unsigned int *)0xC4000000;
 volatile unsigned int * PARAM_1_ADDR = (unsigned int *)0xC4000004;
+volatile float_t      * PARAM_1_ADDR_FP = (float_t *)0xC4000004;
 volatile unsigned int * PARAM_2_ADDR = (unsigned int *)0xC4000008;
 volatile unsigned int * BUSY_ADDR    = (unsigned int *)0xC4000020;
 volatile unsigned int * RET_ADDR     = (unsigned int *)0xC4000010;
-
+volatile float_t * RET_ADDR_FP     = (float_t *)0xC4000010;
+volatile unsigned int * RET_MAX_POOLING_ADDR = (unsigned int *)0xC4002010;
+volatile unsigned int * RET_SOFTMAX_ADDR     = (unsigned int *)0xC4002020;
 volatile float_t * TPU_DATA_ADDR[16] = {(float_t *)0xC4001000, 
                                         (float_t *)0xC4001100, 
                                         (float_t *)0xC4001200, 
@@ -118,20 +125,22 @@ void set_KMN_cmd(int K, int M, int N) {
 
 void send_data_cmd(float_t data, int pos) {
     uint32_t tmp;
-    memcpy(&tmp, &data, sizeof(float_t));
-    *PARAM_1_ADDR = tmp;
+    // memcpy(&tmp, &data, sizeof(float_t));
+    // *PARAM_1_ADDR = tmp;
+    *PARAM_1_ADDR_FP = data;
     *PARAM_2_ADDR =  pos;
     *TPU_CMD = SW_WRITE_DATA;
-    __asm__ volatile ("nop"); 
+    // __asm__ volatile ("nop");
 }
 
 void send_weight_cmd(float_t data, int pos) {
     uint32_t tmp;
-    memcpy(&tmp, &data, sizeof(float_t));
-    *PARAM_1_ADDR = tmp;
+    // memcpy(&tmp, &data, sizeof(float_t));
+    // *PARAM_1_ADDR = tmp;
+    *PARAM_1_ADDR_FP = data;
     *PARAM_2_ADDR =  pos;
     *TPU_CMD = SW_WRITE_WEIGHT;
-    __asm__ volatile ("nop"); 
+    // __asm__ volatile ("nop"); 
 }
 
 void send_idx_cmd(int data, int pos) {
@@ -204,7 +213,47 @@ float_t read_data_cmd(int offset, int pos) {
     for(int i = 0; i < 5; i++)
         __asm__ volatile ("nop");
     
-    tmp = *RET_ADDR;
+    // tmp = *RET_ADDR;
+    // memcpy(&ret, &tmp, sizeof(float_t));
+    // return ret;
+    return *RET_ADDR_FP;
+}
+
+float_t read_max_pooling_cmd() {
+    unsigned int tmp;
+    float_t ret;
+    tmp = *RET_MAX_POOLING_ADDR;
+    memcpy(&ret, &tmp, sizeof(float_t));
+    return ret;
+}
+
+void set_max_pooling_cmd() {
+    *TPU_CMD = SET_MAX_POOLING;
+    __asm__ volatile ("nop");
+}
+
+void send_exp_acc_cmd(float_t data) {
+    uint32_t tmp;
+    memcpy(&tmp, &data, sizeof(float_t));
+    *PARAM_1_ADDR = tmp;
+    *PARAM_2_ADDR = 0;
+    *TPU_CMD = SET_SOFTMAX;
+    __asm__ volatile ("nop"); 
+}
+
+void sf_calc_cmd(float_t data) {
+    uint32_t tmp;
+    memcpy(&tmp, &data, sizeof(float_t));
+    *PARAM_1_ADDR = tmp;
+    *PARAM_2_ADDR = 0;
+    *TPU_CMD = TRIGGER_SOFTMAX;
+    __asm__ volatile ("nop"); 
+}
+
+float_t read_sf_cmd() {
+    unsigned int tmp;
+    float_t ret;
+    tmp = *RET_SOFTMAX_ADDR;
     memcpy(&ret, &tmp, sizeof(float_t));
     return ret;
 }

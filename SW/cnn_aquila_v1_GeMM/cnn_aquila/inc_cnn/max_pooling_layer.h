@@ -123,7 +123,11 @@ void max_pooling_layer_forward_propagation(struct list_node *ptr, unsigned int h
         entry->base.out_ptr_ = entry->base.a_ptr_;
     }
 
-    pool_copy_and_pad_input(entry, hart_id, input);
+    // pool_copy_and_pad_input(entry, hart_id, input);
+    // remove
+    for(int i = 0; i < entry->base.out_size_; i++) {
+        entry->base.out_ptr_[i] = input->in_ptr_[i];
+    }
     free(input->in_ptr_);
 
     float_t *in = entry->base.padded_ptr;
@@ -144,38 +148,34 @@ void max_pooling_layer_forward_propagation(struct list_node *ptr, unsigned int h
     uint64_t dim = out_.height_*out_.width_;
 
     printf("start max pooling:\n");
-    for (uint64_t o = start; o < end; o++)
-    {
-        uint32_t tmp_3, tmp_4;
-        tmp_3 = o;
-        // printf("start layer: %d\n", tmp_3);
+    // for(int i = 0; i < total_size; i++) {
+    //     out[i] = input->in_ptr_[i];
+    // }
+    // free(input->in_ptr_);
+    // for (uint64_t o = start; o < end; o++)
+    // {
+    //     uint32_t tmp_3, tmp_4;
+    //     tmp_3 = o;
 
-        uint64_t c = o / dim;
-        a[o] = (float_t)-DBL_MAX;
-        uint64_t xy = o % dim;
-        uint64_t dsty = xy / out_.width_;
-        uint64_t dstx = xy % out_.width_;
-        uint64_t y = dsty*stride_;
-        uint64_t x = dstx*stride_;
-        uint64_t dymax = min(entry->pooling_size_, in_padded_.height_ - y);
-        uint64_t dxmax = min(entry->pooling_size_, in_padded_.width_ - x);
+    //     uint64_t c = o / dim;
+    //     a[o] = (float_t)-DBL_MAX;
+    //     uint64_t xy = o % dim;
+    //     uint64_t dsty = xy / out_.width_;
+    //     uint64_t dstx = xy % out_.width_;
+    //     uint64_t y = dsty*stride_;
+    //     uint64_t x = dstx*stride_;
+    //     uint64_t dymax = min(entry->pooling_size_, in_padded_.height_ - y);
+    //     uint64_t dxmax = min(entry->pooling_size_, in_padded_.width_ - x);
 
-        for (uint64_t dy = 0; dy < dymax; dy++)
-            for (uint64_t dx = 0; dx < dxmax; dx++)
-            {
-                a[o] = max(a[o], in[get_index(&in_padded_, x + dx, y + dy, c)]);
-            }
-    }
-    // wait for other process done
-    // atomic_or(&entry->base.a_done_flag, 1LL << hart_id);
-    // while (entry->base.a_done_flag != entry->base.mask);
-    for (uint64_t o = start; o < end; o++)
-        out[o] = entry->base.activate(a, o, entry->base.out_size_);
+    //     for (uint64_t dy = 0; dy < dymax; dy++)
+    //         for (uint64_t dx = 0; dx < dxmax; dx++)
+    //         {
+    //             a[o] = max(a[o], in[get_index(&in_padded_, x + dx, y + dy, c)]);
+    //         }
+    // }
+    // for (uint64_t o = start; o < end; o++)
+    //     out[o] = entry->base.activate(a, o, entry->base.out_size_);
     
-    // wait for other process done
-    // atomic_or(&entry->base.done_flag, 1LL << hart_id);
-    // while (entry->base.done_flag != entry->base.mask);
-
     free(entry->base.padded_ptr);
 
 #ifdef PRINT_LAYER

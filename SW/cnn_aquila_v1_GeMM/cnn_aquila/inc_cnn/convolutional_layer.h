@@ -178,6 +178,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
     index3d in_ = entry->in_;
     index3d in_padded_ = entry->in_padded_;
+    index3d padding_ = entry->padding_;
     index3d out_ = entry->out_;
     index3d weight_ = entry->weight_;
     uint64_t h_stride_ = entry->h_stride_;
@@ -190,54 +191,120 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
     uint64_t out_dim = out_.height_*out_.width_;
     
-    
-    uint32_t tmp_1, tmp_2;
     uint32_t tmp_3, tmp_4;
-    tmp_1 = start;
-    tmp_2 = end;
     uint32_t tmp[10];
 
     reset_cmd();
 
-    int data_gbuff_size   = 32768;//32000; //32768
-    int weight_gbuff_size = 32768;//32000; //32768
-
-    int kernel_len = in_.depth_*weight_.height_*weight_.width_;
-
-    int input_num  = data_gbuff_size / kernel_len;
+    int data_gbuff_size   = 32768;
+    int weight_gbuff_size = 32768;
+    int idx_gbuff_size    = 32768;
+    /*
+    modify height_per_operation on each convolutional layer
+    */
+    /*
+    weight
+    */
+    int kernel_len = (in_.depth_) * (weight_.height_) * (weight_.width_);
     int weight_num = weight_gbuff_size / kernel_len;
+    /*
+    data
+    */
+    int ch_per_op_hw = in_.depth_;
+    /*
+        I = Input Size
+        K = Kernel Size
+        P = Padding
+        S = Stride
+        O = Output Size
+    Then:
+        O = (I - K + 2P) / S + 1
+    */
+    int h_per_op_hw = data_gbuff_size / (ch_per_op_hw * in_padded_.width_);
+    int input_num, out_h_per_op_hw, out_w_per_op_hw;
 
-    // 256 correct for first layer
-    while(input_num * weight_num > 1024) {
-        input_num--;
+    input_num = out_.width_ * ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
+    out_w_per_op_hw = out_.width_;
+    out_h_per_op_hw = ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
+
+    while(input_num * weight_num > 1024 || (input_num * in_.depth_ * weight_.height_ * weight_.width_) >= idx_gbuff_size) {
+        h_per_op_hw--;
         weight_num--;
+
+        input_num = out_.width_ * ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
+        out_w_per_op_hw = out_.width_;
+        out_h_per_op_hw = ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
     }
-    // input_num  = 5;
-    // weight_num = 5;
+
+    // int size_per_channel_hw = h_per_op_hw * in_padded_.width_;
+
+    // printf("each HW conv shape: %d %d %d\n", input_num, weight_num, kernel_len);
     if(input_num == 0 || weight_num == 0) {
+        // printf("error shape\n");
+        // exit(1);
+        h_per_op_hw = weight_.height_; //h_stride_ + 
+        weight_num  = 1024 / in_padded_.width_;//4;
+    }
+    // set h = 1
+    /*
+    have bug when h_per_op_hw >= weight_.height_;
+    */
+    // h_per_op_hw = weight_.height_;
+
+    input_num = out_.width_ * ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
+    out_w_per_op_hw = out_.width_;
+    out_h_per_op_hw = ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
+
+    int size_per_channel_hw = h_per_op_hw * in_padded_.width_;
+
+    if(input_num * weight_num > 1024) {
         printf("error shape\n");
         exit(1);
     }
 
     printf("each HW conv shape: %d %d %d\n", input_num, weight_num, kernel_len);
 
-    set_KMN_cmd(kernel_len , input_num, weight_num);
+    set_KMN_cmd(kernel_len, input_num, weight_num);
     set_conv_cmd(kernel_len);
     set_idx_cmd(0, kernel_len, kernel_len*2, kernel_len*3);
     reset_preload_cmd();
-    // padding to pow of 4
-    for(int i = 0; i < kernel_len*input_num; i++) {
-        send_idx_cmd(i, i);
+
+    /*
+    idx ram setting
+    */
+    int index_offset = 0;
+
+    for(uint64_t y = 0; y < out_h_per_op_hw; y++) {
+        for(uint64_t x = 0; x < out_w_per_op_hw; x++) {
+            int input_offset = (y * h_stride_) * in_padded_.width_ + x * w_stride_;
+            for(uint64_t compute_ch = 0; compute_ch < in_.depth_; compute_ch++) {
+                int ch_offset = (h_per_op_hw * compute_ch) * in_padded_.width_;
+                for(uint64_t wy = 0; wy < weight_.height_; wy++) {
+                    // int index_value = ch_offset + input_offset;
+                    for(uint64_t wx = 0; wx < weight_.width_; wx++) {
+                        int index_value = ch_offset + input_offset +
+                                            (wy * in_padded_.width_ + wx);
+                        // printf("send idx: %d %d\n", index_value, index_offset);
+                        send_idx_cmd(index_value, index_offset++);
+                        // if(index_offset >= 32768) {
+                        //     printf("error idx\n");
+                        //     exit(1);
+                        // }
+                    }
+                }
+            }
+        }
     }
-    // send 4 out channel weight each time
+    /*
+    end
+    */
+
     for (uint64_t o = start; o < end; o += weight_num)
     {
-        uint32_t tmp_3, tmp_4;
-        tmp_3 = o + 1;
-        tmp_4 = end;
-        printf("[%s]: %d/%d\n", entry->base.layer_name_, tmp_3, tmp_4);
+
+        printf("[%s]: %d/%d\n", entry->base.layer_name_, (int)(o + 1), (int)end);
         
-        // send 4 channel weight
+        // send remain_oc ch weight
         int send_weight_cnt = 0;
         int remain_oc = min(weight_num, end - o);
 
@@ -253,90 +320,132 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 }
             }
         }
-        //
-
-        // send four data
-        int send_data_offset = 0;
-        int send_data_cnt = 0;
+        
         int output_offset = 0;
-
-        for (uint64_t y = 0; y < out_.height_; y++) {
-            for (uint64_t x = 0; x < out_.width_; x++) {
-                for (uint64_t inc = 0; inc < in_.depth_; inc++) {
-                    int offset_i = (in_padded_.height_ * inc) * in_padded_.width_;
-                    const float_t *pi = in + offset_i;
-                    const float_t * ppi = pi + (y * h_stride_) * in_padded_.width_ + x * w_stride_;
-
-                    for (uint64_t wy = 0; wy < weight_.height_; wy++) {
-                        for (uint64_t wx = 0; wx < weight_.width_; wx++) {
-                            send_data_cmd(ppi[wy * in_padded_.width_ + wx], send_data_offset++);
-                        }
+        // stride 
+        for(uint64_t h = 0; h < out_.height_; h += out_h_per_op_hw) {
+            
+            int send_data_offset = 0;
+            int remain_num = out_.width_ * min(out_h_per_op_hw, out_.height_ - h);
+            // for(uint64_t curr_h = h * h_stride_; curr_h < h * h_stride_ + h_per_op_hw; curr_h++) {
+                uint64_t curr_h = h * h_stride_;
+                for(uint64_t inc = 0; inc < in_.depth_; inc++) {
+                    int offset_i = (in_padded_.width_ * in_padded_.height_ * inc) +
+                                   (in_padded_.width_ * (curr_h));
+                    // in
+                    float_t *pi = in + offset_i;
+                    for(uint64_t i = 0; i < size_per_channel_hw; i++) {
+                        // printf("send data: %f %d\n", (*pi), send_data_offset);
+                        send_data_cmd(*pi++, send_data_offset++);
+                        // if(send_data_offset >= 32768) {
+                        //     printf("error data idx\n");
+                        //     exit(1);
+                        // }
                     }
                 }
-                send_data_cnt++;
-                if(send_data_cnt == input_num) {
+            // }
 #ifdef USING_GEM5
-                    clock_t  tick_tmp = clock();
-#endif
-                    trigger_conv_cmd();
-                    wait_idle_cmd();
-#ifdef USING_GEM5
-                    hardware_compute_time += (clock() - tick_tmp)/(ticks_per_msec/1000);
-#endif
-                    // hardware_compute_time = 0;
-
-                    // read out ram
-                    // for(int bi = 0; bi < 100; bi++) {
-                    //     for(int bj = 0; bj < 4; bj++) {
-                    //         float_t ff = read_data_cmd(bj, bi);
-                    //         printf("(%d, %d)= %f\n", bi, bj, ff);
-                    //     }
-                    // }
-                    for(int s = 0; s < remain_oc; s++) {
-                        float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
-                        int base_offset = (s%4)*4;
-                        int base_idx = (s/4) * (input_num/4 + ((input_num%4) != 0));
-                        for(int k = 0; k < input_num; k++) {
-                            int target_offset = base_offset + (k%4);
-                            int target_idx    = base_idx    + (k/4);
-                            float_t ff = read_data_cmd(target_offset, target_idx);
-                            // if(s == 4) {
-                            //     printf("(%d, %d) = %f\n", target_offset, target_idx, ff);
-                            // }
-                            pa[output_offset + k] = ff;
-                        }
-                    }
-                    output_offset += input_num;
-                    send_data_cnt = 0;
-                    send_data_offset = 0;
-                }
-            }
-        }
-        // set_KMN_cmd(kernel_len , send_data_cnt, remain_oc);
-        if(send_data_cnt != 0) {
-#ifdef USING_GEM5
-            clock_t  tick_tmp = clock();
+            clock_t  tmp_tick = clock();
 #endif
             trigger_conv_cmd();
             wait_idle_cmd();
+
 #ifdef USING_GEM5
-            hardware_compute_time += (clock() - tick_tmp)/(ticks_per_msec/1000);
+            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+            // printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
 #endif
+
             for(int s = 0; s < remain_oc; s++) {
                 float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
                 int base_offset = (s%4)*4;
                 int base_idx = (s/4) * (input_num/4 + ((input_num%4) != 0));
-                for(int k = 0; k < send_data_cnt; k++) {
+                for(int k = 0; k < remain_num; k++) {
                     int target_offset = base_offset + (k%4);
                     int target_idx    = base_idx    + (k/4);
                     float_t ff = read_data_cmd(target_offset, target_idx);
                     pa[output_offset + k] = ff;
                 }
             }
-            output_offset = 0;
-            send_data_cnt = 0;
-            send_data_offset = 0;
+            output_offset += input_num;
         }
+
+//         for (uint64_t y = 0; y < out_.height_; y++) {
+//             for (uint64_t x = 0; x < out_.width_; x++) {
+//                 for (uint64_t inc = 0; inc < in_.depth_; inc++) {
+//                     int offset_i = (in_padded_.height_ * inc) * in_padded_.width_;
+//                     const float_t *pi = in + offset_i;
+//                     const float_t * ppi = pi + (y * h_stride_) * in_padded_.width_ + x * w_stride_;
+
+//                     for (uint64_t wy = 0; wy < weight_.height_; wy++) {
+//                         for (uint64_t wx = 0; wx < weight_.width_; wx++) {
+//                             send_data_cmd(ppi[wy * in_padded_.width_ + wx], send_data_offset++);
+//                         }
+//                     }
+//                 }
+//                 send_data_cnt++;
+//                 if(send_data_cnt == input_num) {
+// #ifdef USING_GEM5
+//                     clock_t  tick_tmp = clock();
+// #endif
+//                     trigger_conv_cmd();
+//                     wait_idle_cmd();
+// #ifdef USING_GEM5
+//                     hardware_compute_time += (clock() - tick_tmp)/(ticks_per_msec/1000);
+// #endif
+//                     // hardware_compute_time = 0;
+
+//                     // read out ram
+//                     // for(int bi = 0; bi < 100; bi++) {
+//                     //     for(int bj = 0; bj < 4; bj++) {
+//                     //         float_t ff = read_data_cmd(bj, bi);
+//                     //         printf("(%d, %d)= %f\n", bi, bj, ff);
+//                     //     }
+//                     // }
+//                     for(int s = 0; s < remain_oc; s++) {
+//                         float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
+//                         int base_offset = (s%4)*4;
+//                         int base_idx = (s/4) * (input_num/4 + ((input_num%4) != 0));
+//                         for(int k = 0; k < input_num; k++) {
+//                             int target_offset = base_offset + (k%4);
+//                             int target_idx    = base_idx    + (k/4);
+//                             float_t ff = read_data_cmd(target_offset, target_idx);
+//                             // if(s == 4) {
+//                             //     printf("(%d, %d) = %f\n", target_offset, target_idx, ff);
+//                             // }
+//                             pa[output_offset + k] = ff;
+//                         }
+//                     }
+//                     output_offset += input_num;
+//                     send_data_cnt = 0;
+//                     send_data_offset = 0;
+//                 }
+//             }
+//         }
+        // set_KMN_cmd(kernel_len , send_data_cnt, remain_oc);
+//         if(send_data_cnt != 0) {
+// #ifdef USING_GEM5
+//             clock_t  tick_tmp = clock();
+// #endif
+//             trigger_conv_cmd();
+//             wait_idle_cmd();
+// #ifdef USING_GEM5
+//             hardware_compute_time += (clock() - tick_tmp)/(ticks_per_msec/1000);
+// #endif
+//             for(int s = 0; s < remain_oc; s++) {
+//                 float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
+//                 int base_offset = (s%4)*4;
+//                 int base_idx = (s/4) * (input_num/4 + ((input_num%4) != 0));
+//                 for(int k = 0; k < send_data_cnt; k++) {
+//                     int target_offset = base_offset + (k%4);
+//                     int target_idx    = base_idx    + (k/4);
+//                     float_t ff = read_data_cmd(target_offset, target_idx);
+//                     pa[output_offset + k] = ff;
+//                 }
+//             }
+//             output_offset = 0;
+//             send_data_cnt = 0;
+//             send_data_offset = 0;
+//         }
 
     }
 
@@ -398,9 +507,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     {
         printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, out[0], out[1], out[entry->base.out_size_-2], out[entry->base.out_size_-1]);
     }
-    // int f2i;
-    // memcpy(&f2i, &out[0], sizeof(int));
-    // printf("value: %d\n", f2i);
 #endif
 
 #ifdef USING_GEM5
@@ -409,6 +515,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
     // 
 #endif
+    // exit(1);
 }
 
 layer_base * new_convolutional_layer(

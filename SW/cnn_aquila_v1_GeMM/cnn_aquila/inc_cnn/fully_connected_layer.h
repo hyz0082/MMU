@@ -10,10 +10,14 @@
 #include "activation_function.h"
 #include "hw_cmd.h"
 #include <time.h>
-// #include <math.h>
+#include <math.h>
 #ifndef USING_GEM5
 #include "loader.h"
 #endif
+
+//
+#include "syscalls.h"
+//
 
 typedef struct _fully_connected_layer
 {
@@ -162,9 +166,37 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
     //         a[i] += b[i];
     // }
 
-    for (uint64_t i = start; i < end; i++)
-        out[i] = entry->base.activate(a, i, entry->base.out_size_);
+     float_t tmp = exp(a[0]);
+    out[0] += tmp;
+    // for (uint64_t i = start; i < end; i++)
+    //     out[i] = entry->base.activate(a, i, entry->base.out_size_);
     
+
+    // float_t max = 0;
+    // float_t denom = 0;
+    // for (uint64_t i = start; i < end; i++) {
+    //     if (a[i] > max) {
+    //         max = a[i];
+    //     }
+    // }
+    // for (uint64_t i = start; i < end; i++) {
+    //     denom += exp(a[i] - max);
+    // }
+    // for (uint64_t i = start; i < end; i++) {
+    //     float_t numer = exp(a[i] - max);
+    //     out[i] = numer / denom;
+    // }
+
+
+    // for (uint64_t i = start; i < end; i++) {
+    //     send_exp_acc_cmd(a[i]);
+    //     wait_idle_cmd();
+    // }
+    // for (uint64_t i = start; i < end; i++) {
+    //     sf_calc_cmd(a[i]);
+    //     wait_idle_cmd();
+    //     out[i] = read_sf_cmd();
+    // }
     // wait for other process done
     // atomic_or(&entry->base.done_flag, 1LL << hart_id);
     // while (entry->base.done_flag != entry->base.mask);
