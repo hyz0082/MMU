@@ -1,8 +1,8 @@
 module data_feeder 
 #( parameter XLEN = 32, 
    parameter BUF_ADDR_LEN = 32, 
-   parameter BRAM_ADDR_LEN = 10,
    parameter ACLEN  = 8,
+   parameter ADDR_BITS=15,
    parameter DATA_WIDTH = 32)
 (
     input                           clk_i,
@@ -137,8 +137,12 @@ always_comb begin
     
 end
 
-TPU t1
-(
+TPU #(
+    .ACLEN(ACLEN),
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_WIDTH(DATA_WIDTH)
+) 
+t1 (
     .clk_i(clk_i), .rst_i(rst_i),
     .tpu_cmd_valid(tpu_cmd_valid),     // tpu valid
     .tpu_cmd(tpu_cmd),           // tpu

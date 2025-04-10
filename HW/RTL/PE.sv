@@ -53,7 +53,6 @@
 module PE
 #(parameter ACLEN  = 8,
   parameter DATA_WIDTH = 32
-//   parameter CLSIZE = `CLP
 )
 (
     /////////// System signals   ///////////////////////////////////////////////

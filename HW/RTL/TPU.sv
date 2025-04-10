@@ -13,10 +13,9 @@
 // 
 
 module TPU
-#(parameter ACLEN  = 8,
-  parameter DATA_WIDTH = 32,
+#(parameter ACLEN=8,
   parameter ADDR_BITS=16,
-  parameter DATA_BITS=32 
+  parameter DATA_WIDTH = 32
 )
 (
     /////////// System signals   ///////////////////////////////////////////////
@@ -93,7 +92,6 @@ localparam  SET_KMN           = 13; // partial
 //                                    // param_1_in: idx (0~4)
 //                                    // param_2_in: value
 localparam  SW_READ_DATA       = 14; // whole
-// localparam  SET_COL_IDX        = 15;
 localparam  SET_PRELOAD        = 15; // whole
 localparam  SW_WRITE_PARTIAL   = 16; // whole
 localparam  TRIGGER_BN   = 17; // whole
@@ -160,29 +158,27 @@ logic                        mmu_busy;     // 0->idle, 1->busy
 /*
 row_idx: base address
 */
-logic [ADDR_BITS-1 : 0] row_idx       [0 : 3];
-logic [ADDR_BITS-1 : 0] row_acc;
-logic [ADDR_BITS-1 : 0] row_offset;
-logic [ADDR_BITS-1 : 0] row_idx_start [0 : 3];
-logic [ADDR_BITS-1 : 0] col_idx       [0 : 3];
-logic [ADDR_BITS-1 : 0] col_acc;
-logic [ADDR_BITS-1 : 0] col_offset;
-logic [ADDR_BITS-1 : 0] col_idx_start [0 : 3];
-logic [DATA_BITS-1 : 0] row_input     [0 : 3];
-logic [DATA_BITS-1 : 0] col_input     [0 : 3];
+logic [ADDR_BITS-1  : 0] row_idx       [0 : 3];
+logic [ADDR_BITS-1  : 0] row_acc;
+logic [ADDR_BITS-1  : 0] row_offset;
+logic [ADDR_BITS-1  : 0] row_idx_start [0 : 3];
+logic [ADDR_BITS-1  : 0] col_idx       [0 : 3];
+logic [ADDR_BITS-1  : 0] col_acc;
+logic [ADDR_BITS-1  : 0] col_offset;
+logic [ADDR_BITS-1  : 0] col_idx_start [0 : 3];
+logic [DATA_WIDTH-1 : 0] row_input     [0 : 3];
+logic [DATA_WIDTH-1 : 0] col_input     [0 : 3];
 
 logic [ADDR_BITS-1 : 0] store_idx [0 : 3];
-
-// logic [ADDR_BITS-1 : 0] I_index;
 
 //#########################
 //#    K     M     N      #
 //#########################
 logic [ADDR_BITS-1 : 0] K_reg, M_reg, N_reg; // (M * K) (K * N)
 
-logic                          mmu_cmd_valid;  // cmd
-logic   [ACLEN : 0]            mmu_cmd;        // cmd
-logic   [DATA_WIDTH*4-1 : 0]   mmu_param_in [0 : 3]; // data 1
+logic                        mmu_cmd_valid;  // cmd
+logic [ACLEN : 0]            mmu_cmd;        // cmd
+logic [DATA_WIDTH*4-1 : 0]   mmu_param_in [0 : 3]; // data 1
 // logic   [DATA_WIDTH*4-1 : 0]   mmu_param_2_in; // data 2
 
 
@@ -265,7 +261,7 @@ logic                        cmp_in_valid [0 : 20];
 //#########################
 //       SOFTMAX
 //#########################
-// divisor
+// divisor 
 logic   [DATA_WIDTH-1 : 0]   divisor;
 logic   [DATA_WIDTH-1 : 0]   exp_acc, exp_acc_reg;
 logic                        exp_acc_valid, exp_acc_last;
@@ -443,23 +439,23 @@ end
 always_comb begin
     if(curr_state == OUTPUT_3_S) begin
         ret_valid = 1;
-        case (param_1_in_reg)
-            0 : ret_data_out = P_data_out_reg[0][127 : 96];
-            1 : ret_data_out = P_data_out_reg[0][95  : 64];
-            2 : ret_data_out = P_data_out_reg[0][63  : 32];
-            3 : ret_data_out = P_data_out_reg[0][31  :  0];
-            4 : ret_data_out = P_data_out_reg[1][127 : 96];
-            5 : ret_data_out = P_data_out_reg[1][95  : 64];
-            6 : ret_data_out = P_data_out_reg[1][63  : 32];
-            7 : ret_data_out = P_data_out_reg[1][31  :  0];
-            8 : ret_data_out = P_data_out_reg[2][127 : 96];
-            9 : ret_data_out = P_data_out_reg[2][95  : 64];
-            10: ret_data_out = P_data_out_reg[2][63  : 32];
-            11: ret_data_out = P_data_out_reg[2][31  :  0];
-            12: ret_data_out = P_data_out_reg[3][127 : 96];
-            13: ret_data_out = P_data_out_reg[3][95  : 64];
-            14: ret_data_out = P_data_out_reg[3][63  : 32];
-            15: ret_data_out = P_data_out_reg[3][31  :  0];
+        case (param_1_in_reg)  //DATA_WIDTH
+            0 : ret_data_out = P_data_out_reg[0][(DATA_WIDTH*4-1)-:DATA_WIDTH]; // 127:96
+            1 : ret_data_out = P_data_out_reg[0][(DATA_WIDTH*3-1)-:DATA_WIDTH]; // 95:64
+            2 : ret_data_out = P_data_out_reg[0][(DATA_WIDTH*2-1)-:DATA_WIDTH]; // 63:32
+            3 : ret_data_out = P_data_out_reg[0][(DATA_WIDTH*1-1)-:DATA_WIDTH]; // 31:0
+            4 : ret_data_out = P_data_out_reg[1][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+            5 : ret_data_out = P_data_out_reg[1][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+            6 : ret_data_out = P_data_out_reg[1][(DATA_WIDTH*2-1)-:DATA_WIDTH];
+            7 : ret_data_out = P_data_out_reg[1][(DATA_WIDTH*1-1)-:DATA_WIDTH];
+            8 : ret_data_out = P_data_out_reg[2][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+            9 : ret_data_out = P_data_out_reg[2][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+            10: ret_data_out = P_data_out_reg[2][(DATA_WIDTH*2-1)-:DATA_WIDTH];
+            11: ret_data_out = P_data_out_reg[2][(DATA_WIDTH*1-1)-:DATA_WIDTH];
+            12: ret_data_out = P_data_out_reg[3][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+            13: ret_data_out = P_data_out_reg[3][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+            14: ret_data_out = P_data_out_reg[3][(DATA_WIDTH*2-1)-:DATA_WIDTH];
+            15: ret_data_out = P_data_out_reg[3][(DATA_WIDTH*1-1)-:DATA_WIDTH];
             default: ret_data_out = 0;
         endcase
     end
@@ -924,10 +920,11 @@ end
 //##########################
 //# MATRIX MULTIPLE ENGINE #
 //##########################
-MMU M1
-//#(
-//)
-(
+MMU #(
+    .ACLEN(ACLEN), // ADDR_BITS
+    .DATA_WIDTH(DATA_WIDTH)  // DATA_WIDTH
+)
+M1 (
     .clk_i(clk_i), 
     .rst_i(rst_i),
     .mmu_cmd_valid(mmu_cmd_valid), 
@@ -1045,15 +1042,15 @@ always_ff @( posedge clk_i ) begin
         end
     end
     else if(bn_valid_reg) begin
-        max_pooling_data[0]  <= bn_data_out[0][(DATA_WIDTH*4-1)-:32];//[127:31];//DATA_WIDTH
-        max_pooling_data[1]  <= bn_data_out[1][(DATA_WIDTH*4-1)-:32];
-        max_pooling_data[2]  <= bn_data_out[2][(DATA_WIDTH*4-1)-:32];
-        max_pooling_data[3]  <= bn_data_out[3][(DATA_WIDTH*4-1)-:32];
-        max_pooling_data[4]  <= bn_data_out[0][(DATA_WIDTH*3-1)-:32];
-        max_pooling_data[5]  <= bn_data_out[1][(DATA_WIDTH*3-1)-:32];
-        max_pooling_data[6]  <= bn_data_out[2][(DATA_WIDTH*3-1)-:32];
-        max_pooling_data[7]  <= bn_data_out[3][(DATA_WIDTH*3-1)-:32];
-        max_pooling_data[15] <= bn_data_out[0][(DATA_WIDTH*2-1)-:32];
+        max_pooling_data[0]  <= bn_data_out[0][(DATA_WIDTH*4-1)-:DATA_WIDTH];//[127:31];//DATA_WIDTH
+        max_pooling_data[1]  <= bn_data_out[1][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+        max_pooling_data[2]  <= bn_data_out[2][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+        max_pooling_data[3]  <= bn_data_out[3][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+        max_pooling_data[4]  <= bn_data_out[0][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+        max_pooling_data[5]  <= bn_data_out[1][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+        max_pooling_data[6]  <= bn_data_out[2][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+        max_pooling_data[7]  <= bn_data_out[3][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+        max_pooling_data[15] <= bn_data_out[0][(DATA_WIDTH*2-1)-:DATA_WIDTH];
     end
     // 0 ~ 6
     for(int i = 0; i < 7; i++) begin
@@ -1121,8 +1118,8 @@ end
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(15),
-    .DATA_BITS(32)
+    .ADDR_BITS(ADDR_BITS), // ADDR_BITS
+    .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
     )
     gbuff (
         .clk_i(clk_i),
@@ -1141,8 +1138,8 @@ endgenerate
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(15),
-    .DATA_BITS(32)
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_BITS(DATA_WIDTH)
     )
     weight (
         .clk_i(clk_i),
@@ -1161,8 +1158,8 @@ endgenerate
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(15),
-    .DATA_BITS(32)
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_BITS(DATA_WIDTH)
     )
     I_gbuff (
         .clk_i(clk_i),
@@ -1182,7 +1179,7 @@ generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
     .ADDR_BITS(8),
-    .DATA_BITS(128)
+    .DATA_BITS(DATA_WIDTH*4)
     )
     P_gbuff (
         .clk_i(clk_i),

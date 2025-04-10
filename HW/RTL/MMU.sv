@@ -250,81 +250,98 @@ genvar i;
 generate
        for(i = 0; i < 16; i++) begin
               if(i == 0) begin
-                     PE pe0(
+                     PE #(
+                         .ACLEN(ACLEN), // ADDR_BITS
+                         .DATA_WIDTH(DATA_WIDTH)  // DATA_WIDTH
+                     ) 
+                     pe0 (
                          .clk_i(clk_i), 
                          .rst_i(rst_i),
                          .pe_cmd_valid(pe_cmd_valid[0]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
                          .param_2_in(param_2_in),
-                         .preload_data_in(params[0][127 : 96]),
+                         .preload_data_in(params[0][(DATA_WIDTH*4-1)-:DATA_WIDTH]),
                          .data_in(data_in[0]),
                          .weight_in(weight_in[0]),
                          .data_out(data_out[0]), 
                          .weight_out(weight_out[0]),
                          .mac_value(mac_value[0]),
                          .busy(pe_busy[0]),
-                         .bn_in(bn_in[0][127 : 96]),
+                         .bn_in(bn_in[0][(DATA_WIDTH*4-1)-:DATA_WIDTH]),
                          .bn_out(bn_out[0]),
                          .bn_valid(pe_bn_valid[0])
                      );
               end
               else if (i == 1 || i == 2 || i == 3) begin
-                     PE pe1(
+                     PE #(
+                         .ACLEN(ACLEN), // ADDR_BITS
+                         .DATA_WIDTH(DATA_WIDTH)  // DATA_WIDTH
+                     )
+                     pe1 (
                          .clk_i(clk_i), 
                          .rst_i(rst_i),
                          .pe_cmd_valid(pe_cmd_valid[i]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
                          .param_2_in(param_2_in),
-                         .preload_data_in(params[i][127 : 96]),
+                         .preload_data_in(params[i][(DATA_WIDTH*4-1)-:DATA_WIDTH]),
                          .data_in(data_out[i-1]),
                          .weight_in(weight_in[i]),
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
                          .busy(pe_busy[i]),
-                         .bn_in(bn_in[i][127 : 96]),
+                         .bn_in(bn_in[i][(DATA_WIDTH*4-1)-:DATA_WIDTH]),
                          .bn_out(bn_out[i]),
                          .bn_valid(pe_bn_valid[i])
                      );
               end
               else if (i == 4 || i == 8 || i == 12) begin
-                     PE pe2(
+                     PE #(
+                         .ACLEN(ACLEN), // ADDR_BITS
+                         .DATA_WIDTH(DATA_WIDTH)  // DATA_WIDTH
+                     )
+                     pe2 (
                          .clk_i(clk_i), 
                          .rst_i(rst_i),
                          .pe_cmd_valid(pe_cmd_valid[i]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
                          .param_2_in(param_2_in),
-                         .preload_data_in(params[0][127-(32*(i/4)) : 96-(32*(i/4))]),
+                         //[127-(32*(i/4)) : 96-(32*(i/4))]
+                         .preload_data_in(params[0][(DATA_WIDTH*4-1)-(DATA_WIDTH*(i/4)) : (DATA_WIDTH*3)-(DATA_WIDTH*(i/4))]),
                          .data_in(data_in[i/4]),
                          .weight_in(weight_out[i-4]),
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
                          .busy(pe_busy[i]),
-                         .bn_in(bn_in[0][127-(32*(i/4)) : 96-(32*(i/4))]),
+                         .bn_in(bn_in[0][(DATA_WIDTH*4-1)-(DATA_WIDTH*(i/4)) : (DATA_WIDTH*3)-(DATA_WIDTH*(i/4))]),
                          .bn_out(bn_out[i]),
                          .bn_valid(pe_bn_valid[i])
                      );
               end
               else begin
-                     PE pe(
+                     PE #(
+                         .ACLEN(ACLEN), // ADDR_BITS
+                         .DATA_WIDTH(DATA_WIDTH)  // DATA_WIDTH
+                     )
+                     pe (
                          .clk_i(clk_i), 
                          .rst_i(rst_i),
                          .pe_cmd_valid(pe_cmd_valid[i]),
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
                          .param_2_in(param_2_in),
-                         .preload_data_in(params[i%4][127-(32*(i/4)) : 96-(32*(i/4))]),
+                         .preload_data_in(params[i%4][(DATA_WIDTH*4-1)-(DATA_WIDTH*(i/4)) : (DATA_WIDTH*3)-(DATA_WIDTH*(i/4))]),
                          .data_in(data_out[i-1]),
                          .weight_in(weight_out[i-4]),
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
                          .busy(pe_busy[i]),
-                         .bn_in(bn_in[i%4][127-(32*(i/4)) : 96-(32*(i/4))]),
+                         .bn_in(bn_in[i%4][(DATA_WIDTH*4-1)-(DATA_WIDTH*(i/4)) : (DATA_WIDTH*3)-(DATA_WIDTH*(i/4))]),
                          .bn_out(bn_out[i]),
                          .bn_valid(pe_bn_valid[i])
                      );
