@@ -44,7 +44,7 @@ localparam DRAM_R_LENGTH = 32'hC4002028;
 localparam DRAM_RW          = 32'hC400202C;
 localparam DRAM_TR   = 32'hC4002030;
 localparam SRAM_OFFSET   = 32'hC4002034;
-
+localparam WRITE_DATA_TYPE_ADDR = 32'hC4002038;
 localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
                                           32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
                                           32'hC4001800, 32'hC4001900, 32'hC4001A00, 32'hC4001B00,
@@ -116,6 +116,8 @@ logic [6 : 0] got_addr_offset;
 // (* mark_debug="true" *) logic           dram_read_data_vaild_l_r;
 (* mark_debug="true" *) logic [255 : 0] dram_read_data_l_r;
 
+logic write_data_type; // 0: input, 1: weight
+
 /*
     get 512 bits data per dram read
     512 / 16 = 32 inputs
@@ -131,6 +133,16 @@ logic [3 : 0] word_size;
 logic [ADDR_BITS-1 : 0] sram_offset;
 logic [3 : 0] data_type;
 logic [6 : 0] addr_offset;
+
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        write_data_type <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == WRITE_DATA_TYPE_ADDR) begin
+        write_data_type <= S_DEVICE_data_i;
+    end
+end
 
 
 
@@ -202,9 +214,15 @@ always_ff @( posedge clk_i ) begin
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == PARAM_2_ADDR) begin
         tpu_param_2_in <= S_DEVICE_data_i;
     end
-    else if(write_data_curr_state == WRITE_INPUT_S) begin
+    else if(write_data_curr_state == WRITE_INPUT_S && write_data_type == 0) begin
         tpu_cmd_valid  <= 1;
         tpu_cmd        <= 9;
+        tpu_param_1_in <= data_in[got_addr[5:1]];// data_in
+        tpu_param_2_in <= sram_offset;// index
+    end
+    else if(write_data_curr_state == WRITE_INPUT_S && write_data_type == 1) begin
+        tpu_cmd_valid  <= 1;
+        tpu_cmd        <= 10;
         tpu_param_1_in <= data_in[got_addr[5:1]];// data_in
         tpu_param_2_in <= sram_offset;// index
     end
