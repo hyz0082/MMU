@@ -8,26 +8,28 @@ module data_feeder
     input                           clk_i,
     input                           rst_i,
 
-    input                           S_DEVICE_strobe_i, 
-    input [BUF_ADDR_LEN-1 : 0]      S_DEVICE_addr_i,
+(* mark_debug="true" *)    input                           S_DEVICE_strobe_i, 
+(* mark_debug="true" *)    input [BUF_ADDR_LEN-1 : 0]      S_DEVICE_addr_i,
     input                           S_DEVICE_rw_i,
     input [XLEN/8-1 : 0]            S_DEVICE_byte_enable_i,
-    input [XLEN-1 : 0]              S_DEVICE_data_i,
+(* mark_debug="true" *)    input [XLEN-1 : 0]              S_DEVICE_data_i,
 
     // to aquila
     output logic                      S_DEVICE_ready_o,
     output logic [XLEN-1 : 0]         S_DEVICE_data_o,
 
     // to cdc
-(* mark_debug="true" *)         input  logic              fifo_addr_full_i,
+(* mark_debug="true" *)     input  logic              fifo_addr_full_i,
 (* mark_debug="true" *)     output logic              dram_addr_valid_o,
-    output logic [XLEN-1 : 0] dram_addr_o,
+(* mark_debug="true" *)         output logic [XLEN-1 : 0] dram_addr_o,
+(* mark_debug="true" *)         output logic              rw_o,
+(* mark_debug="true" *)         output logic [511 : 0]    dram_data_o,
+(* mark_debug="true" *)         output logic [4 : 0] data_start_idx_o,
+(* mark_debug="true" *)         output logic [4 : 0] data_end_idx_o,
 
 (* mark_debug="true" *)     input  logic          fifo_data_empty_i,
     output logic          fifo_data_rd_en_o,
-    // input logic          dram_read_data_vaild_h_i,
     input logic[255 : 0] dram_read_data_h_i,
-    // input logic          dram_read_data_vaild_l_i,
     input logic[255 : 0] dram_read_data_l_i
 );
 
@@ -45,14 +47,26 @@ localparam DRAM_RW          = 32'hC400202C;
 localparam DRAM_TR   = 32'hC4002030;
 localparam SRAM_OFFSET   = 32'hC4002034;
 localparam WRITE_DATA_TYPE_ADDR = 32'hC4002038;
+localparam [31:0] DRAM_WRITE_ADDR [0:3] = {32'hC400203C,
+                                           32'hC4002040,
+                                           32'hC4002044,
+                                           32'hC4002048};
+localparam NUM_LANS_ADDR     = 32'hC400204C;
+localparam DRAM_WRITE_LEN    = 32'hC4002050;
+localparam TR_DRAM_W         = 32'hC4002054;
+localparam OUTPUT_RECV_CNT_ADDR = 32'hC4002058;
+localparam SW_DATA_ADDR =  32'hC400205C;
+localparam SW_WRITE_DRAM_MODE_ADDR = 32'hC4002060;
+
+
 localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
                                           32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
                                           32'hC4001800, 32'hC4001900, 32'hC4001A00, 32'hC4001B00,
                                           32'hC4001C00, 32'hC4001D00, 32'hC4001E00, 32'hC4001F00};
 
 /*
-    DRAM ACCESS FSM
-*/
+ *  DRAM ACCESS FSM
+ */
 typedef enum {IDLE_S,
               WAIT_FIFO_ADDR_S,
               WAIT_FIFO_DATA_S,
@@ -62,10 +76,19 @@ typedef enum {IDLE_S,
               WRITE_INPUT_S,
               WRITE_WEIGHT_S,
               READ_NEXT_DATA_S,
-              WRITE_S 
+              WRITE_S,
+              COLLECT_OUTPUT_S,
+              WAIT_GEMM_DATA_S,
+              WRITE_DRAM_DATA_S,
+              WAIT_GEMM_IDLE_S,
+              DUMMY_1_S
               } state_t;
-(* mark_debug="true" *)state_t send_req_curr_state, send_req_next_state;
-(* mark_debug="true" *)state_t write_data_curr_state, write_data_next_state;
+(* mark_debug="true" *) state_t send_req_curr_state;
+state_t send_req_next_state;
+(* mark_debug="true" *) state_t write_data_curr_state;
+state_t write_data_next_state;
+(* mark_debug="true" *) state_t write_dram_curr_state;
+state_t write_dram_next_state;
 
 // 0xC4000000
 (* mark_debug="true" *) logic                        tpu_cmd_valid;     // tpu valid
@@ -77,12 +100,12 @@ assign S_DEVICE_data_i_t = S_DEVICE_data_i;
 // 0xC4000008
 (* mark_debug="true" *) logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in;     // data 2
 
-logic                      ret_valid;
-logic   [DATA_WIDTH-1 : 0] ret_data_out;
+(* mark_debug="true" *) logic                      ret_valid;
+(* mark_debug="true" *) logic   [DATA_WIDTH-1 : 0] ret_data_out;
 logic   [DATA_WIDTH-1 : 0] ret_max_pooling;
 logic   [DATA_WIDTH-1 : 0] ret_softmax_result;
 // 0xC400000A
-logic                      tpu_busy;     // 0->idle, 1->busy
+(* mark_debug="true" *) logic                      tpu_busy;     // 0->idle, 1->busy
 // 0xC4000010
 logic   [DATA_WIDTH-1 : 0] ret_data_out_reg;
 
@@ -102,19 +125,21 @@ logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_in;
     length : C4002028
     rw_r   : C400202C
 */
-(* mark_debug="true" *) logic [XLEN-1 : 0] addr; // + 64 each times (512 bits)
-logic rw_r;  // 3'b000 for write command, 3'b001 for read command
+logic [XLEN-1 : 0] addr; // + 64 each times (512 bits)
+logic rw_r;  // 3'b000 for read, 3'b001 for write
 logic [511 : 0] dram_data_read;
 logic [511 : 0] dram_data_write;
 logic [63:0] byte_mask_r;
 
-(* mark_debug="true" *) logic [XLEN-1 : 0] got_addr;
-logic [6 : 0] got_addr_offset;
+logic [XLEN-1 : 0] got_addr;
+
+
+logic [6 : 0] dram_write_addr_offset;
 
 // (* mark_debug="true" *) logic           dram_read_data_vaild_h_r;
-(* mark_debug="true" *) logic [255 : 0] dram_read_data_h_r;
+logic [255 : 0] dram_read_data_h_r;
 // (* mark_debug="true" *) logic           dram_read_data_vaild_l_r;
-(* mark_debug="true" *) logic [255 : 0] dram_read_data_l_r;
+logic [255 : 0] dram_read_data_l_r;
 
 logic write_data_type; // 0: input, 1: weight
 
@@ -122,17 +147,62 @@ logic write_data_type; // 0: input, 1: weight
     get 512 bits data per dram read
     512 / 16 = 32 inputs
 */
-logic [DATA_WIDTH-1 : 0] data_in [0 : 31];
-(* mark_debug="true" *) logic [ADDR_BITS-1 : 0] req_len_cnt;
+(* mark_debug="true" *) logic [DATA_WIDTH-1 : 0] data_in [0 : 31];
+logic [ADDR_BITS-1 : 0] req_len_cnt;
 logic [5 : 0]           req_len; // max req len = 32
 logic [ADDR_BITS-1 : 0] got_len_cnt;
 logic [5 : 0]           got_len_expect; // max req len = 32
 logic [ADDR_BITS-1 : 0] send_cnt;
-(* mark_debug="true" *) logic [ADDR_BITS-1 : 0] length;
+logic [ADDR_BITS-1 : 0] length;
 logic [3 : 0] word_size;
 logic [ADDR_BITS-1 : 0] sram_offset;
 logic [3 : 0] data_type;
 logic [6 : 0] addr_offset;
+
+
+/*
+ * DRAM WRITE SIGNAL
+ *  
+ */
+logic [ADDR_BITS-1  : 0] output_recv_cnt;
+logic [ADDR_BITS-1  : 0] dram_addr_offset;
+logic [DATA_WIDTH-1 : 0] dram_data_r [0 : 3][0 : 140];
+(* mark_debug="true" *) logic [DATA_WIDTH-1 : 0] dram_data_reorder_r [0 : 31];
+logic [XLEN-1 : 0]       dram_write_addr [0 : 3];
+logic [ADDR_BITS-1  : 0] dram_write_length;
+(* mark_debug="true" *) logic [ADDR_BITS-1  : 0] dram_write_length_cnt;
+logic [ADDR_BITS-1  : 0] target_idx;
+(* mark_debug="true" *) logic [7 : 0] num_lans, send_lans_cnt;
+logic [DATA_WIDTH*4-1 : 0] P_data_out_r [0 : 3];
+(* mark_debug="true" *) logic [DATA_WIDTH*4-1 : 0] P_data_out [0 : 3];
+
+/*
+ * SOFTWARE READ / WRITE DATA
+ *  
+ */
+logic [DATA_WIDTH-1 : 0] sw_data_r;
+logic [DATA_WIDTH-1 : 0] sw_write_data_r;
+logic sw_write_dram_mode;
+logic rw_to_gemm;
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        rw_to_gemm <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_TR || 
+            S_DEVICE_strobe_i && S_DEVICE_addr_i == TR_DRAM_W) begin
+        rw_to_gemm <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        sw_write_dram_mode <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == SW_WRITE_DRAM_MODE_ADDR) begin
+        sw_write_dram_mode <= S_DEVICE_data_i;
+    end
+end
 
 
 always_ff @( posedge clk_i ) begin
@@ -143,8 +213,6 @@ always_ff @( posedge clk_i ) begin
         write_data_type <= S_DEVICE_data_i;
     end
 end
-
-
 
 always_ff @( posedge clk_i ) begin
     if(ret_valid) begin
@@ -159,7 +227,8 @@ always_ff @( posedge clk_i ) begin
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == BUSY_ADDR) begin
         S_DEVICE_data_o  <= tpu_busy || 
                             (send_req_curr_state   != IDLE_S) ||
-                            (write_data_curr_state != IDLE_S);
+                            (write_data_curr_state != IDLE_S) ||
+                            (write_dram_curr_state != IDLE_S);
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_ADDR) begin
         S_DEVICE_data_o  <= {16'h0, ret_data_out_reg};
@@ -170,8 +239,9 @@ always_ff @( posedge clk_i ) begin
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_SOFTMAX_ADDR) begin
         S_DEVICE_data_o  <= ret_softmax_result;
     end
-    
-    // RET_MAX_POOLING_ADDR
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == SW_DATA_ADDR) begin
+        S_DEVICE_data_o  <= sw_data_r;
+    end
 end
 
 always_ff @( posedge clk_i ) begin
@@ -226,6 +296,12 @@ always_ff @( posedge clk_i ) begin
         tpu_param_1_in <= data_in[got_addr[5:1]];// data_in
         tpu_param_2_in <= sram_offset;// index
     end
+    else if(write_dram_curr_state ==  COLLECT_OUTPUT_S) begin
+        tpu_cmd_valid  <= 1;
+        tpu_cmd        <= 14;
+        // tpu_param_1_in <= 0;// data_in
+        tpu_param_2_in <= output_recv_cnt;// index
+    end
     else begin
         tpu_cmd_valid <= 0;
     end
@@ -255,6 +331,11 @@ t1 (
     .tpu_data_2_in(tpu_data_2_in),
     .tpu_data_3_in(tpu_data_3_in),
     .tpu_data_4_in(tpu_data_4_in),
+
+    .tpu_data_1_out(P_data_out[0]),
+    .tpu_data_2_out(P_data_out[1]),
+    .tpu_data_3_out(P_data_out[2]),
+    .tpu_data_4_out(P_data_out[3]),
     
     .ret_valid(ret_valid),
     .ret_data_out(ret_data_out),
@@ -297,14 +378,16 @@ always_comb begin
 end
 
 always_comb begin
-    dram_addr_o = addr;
-    dram_addr_valid_o = (send_req_curr_state == SEND_REQ_S);
+    dram_addr_o = (send_req_curr_state == SEND_REQ_S) ? addr
+                                                      : dram_write_addr[send_lans_cnt];
+    dram_addr_valid_o = (send_req_curr_state == SEND_REQ_S) || 
+                        (write_dram_curr_state == SEND_REQ_S);
+    //b000 for write command, 3'b001 for read command
+    rw_o = (send_req_curr_state == SEND_REQ_S) ? 0
+                                               : 1;
 end
 
 always_comb begin
-    // for (int i = 0; i < 32; i++) begin
-    //     data_in[i] = dram_data_read[(DATA_WIDTH*(i+1)-1)-:DATA_WIDTH];
-    // end
     /*
      * bits 255:0
      */
@@ -316,7 +399,6 @@ always_comb begin
      */
     for (int i = 16; i < 32; i+=2) begin
         {data_in[i+1], data_in[i]} = dram_data_read[(DATA_WIDTH*(32-(i-16))-1)-:(DATA_WIDTH*2)];
-        // {data_in[i+1], data_in[i]} = dram_read_data_h_r
     end
     
 end
@@ -374,8 +456,10 @@ always_comb begin
                 write_data_next_state = WAIT_FIFO_DATA_S;
             else
                 write_data_next_state = IDLE_S;
-    WAIT_FIFO_DATA_S: if(!fifo_data_empty_i) 
+    WAIT_FIFO_DATA_S: if(!fifo_data_empty_i && rw_to_gemm) 
                         write_data_next_state = WRITE_INPUT_S;
+                      else if(!fifo_data_empty_i && !rw_to_gemm) 
+                        write_data_next_state = DUMMY_1_S;
                       else 
                         write_data_next_state = WAIT_FIFO_DATA_S;
     WRITE_INPUT_S: if(send_cnt == length - 1)
@@ -387,12 +471,14 @@ always_comb begin
                             write_data_next_state = IDLE_S;
                       else
                             write_data_next_state = WAIT_FIFO_DATA_S;
+    DUMMY_1_S: write_data_next_state = IDLE_S;
     default: write_data_next_state = IDLE_S;
     endcase
 end
 
 always_comb begin
-    fifo_data_rd_en_o = (write_data_curr_state == READ_NEXT_DATA_S);
+    fifo_data_rd_en_o = (write_data_curr_state == READ_NEXT_DATA_S) ||
+                        (write_data_curr_state == DUMMY_1_S);
 end
 
 always_ff @( posedge clk_i ) begin
@@ -406,6 +492,20 @@ always_ff @( posedge clk_i ) begin
         got_addr <= got_addr + 2;
     end
 end
+
+/*
+ * SW READ TEST SIGNAL
+ * sw_data_r
+ */
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        sw_data_r <= 0;
+    end
+    else if(write_data_curr_state == DUMMY_1_S) begin
+        sw_data_r <= data_in[got_addr[5:1]];
+    end
+end
+
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
@@ -423,32 +523,6 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-/*
-    cdc response
-*/
-// always_ff @( posedge clk_i ) begin
-//     if(rst_i) begin
-//         dram_read_data_vaild_h_r <= 0;
-//     end
-//     else if(!fifo_data_empty_i) begin
-//         dram_read_data_vaild_h_r <= 1;
-//     end
-//     else if(curr_state == WRITE_INPUT_S) begin
-//         dram_read_data_vaild_h_r <= 0;
-//     end
-// end
-
-// always_ff @( posedge clk_i ) begin
-//     if(rst_i) begin
-//         dram_read_data_vaild_l_r <= 0;
-//     end
-//     else if(dram_read_data_vaild_l_i) begin
-//         dram_read_data_vaild_l_r <= 1;
-//     end
-//     else if(curr_state == WRITE_INPUT_S) begin
-//         dram_read_data_vaild_l_r <= 0;
-//     end
-// end
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
@@ -466,6 +540,198 @@ always_ff @( posedge clk_i ) begin
     else if(!fifo_data_empty_i) begin
         dram_read_data_l_r <= dram_read_data_l_i;
     end
+end
+
+
+
+/*
+ * DRAM WRITE 
+ * 1. collect data from output buffer
+ * 2. write data to dram 
+ */
+always_ff @(posedge clk_i) begin
+    if(rst_i) begin
+        write_dram_curr_state <= IDLE_S;
+    end
+    else begin
+        write_dram_curr_state <= write_dram_next_state;
+    end
+end
+
+always_comb begin
+    case (write_dram_curr_state)
+    IDLE_S: if(S_DEVICE_strobe_i && S_DEVICE_addr_i == TR_DRAM_W)
+                write_dram_next_state = COLLECT_OUTPUT_S;
+            else 
+                write_dram_next_state = IDLE_S;
+    COLLECT_OUTPUT_S: write_dram_next_state = WAIT_GEMM_DATA_S;
+    WAIT_GEMM_DATA_S: if(ret_valid && (dram_addr_offset*4 + 4) >= dram_write_length)
+                        write_dram_next_state = WAIT_FIFO_ADDR_S;
+                      else if(ret_valid)
+                        write_dram_next_state = COLLECT_OUTPUT_S;
+                      else 
+                        write_dram_next_state = WAIT_GEMM_DATA_S;
+    WAIT_FIFO_ADDR_S: if(!fifo_addr_full_i) 
+                        write_dram_next_state = SEND_REQ_S;
+                      else
+                        write_dram_next_state = WAIT_FIFO_ADDR_S;
+    SEND_REQ_S: if(send_lans_cnt + 1 == num_lans && 
+                   dram_write_length_cnt + (dram_write_addr_offset >> 1) >= dram_write_length)
+                    write_dram_next_state = IDLE_S;
+                else 
+                    write_dram_next_state = WAIT_FIFO_ADDR_S;
+    default: write_dram_next_state = IDLE_S;
+    endcase
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        output_recv_cnt <= 0;
+    end
+    else if(write_dram_curr_state == WAIT_GEMM_DATA_S && ret_valid) begin
+        output_recv_cnt <= output_recv_cnt + 1;
+    end
+    else if (S_DEVICE_strobe_i && S_DEVICE_addr_i == OUTPUT_RECV_CNT_ADDR ) begin
+        output_recv_cnt <= 0;
+    end
+end
+
+// dram_addr_offset
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        dram_addr_offset <= 0;
+    end
+    else if(write_dram_curr_state == IDLE_S) begin
+        dram_addr_offset <= 0;
+    end
+    else if(write_dram_curr_state == WAIT_GEMM_DATA_S && ret_valid) begin
+        dram_addr_offset <= dram_addr_offset + 1;
+    end
+end
+
+always_comb begin
+    dram_write_addr_offset = 64 - dram_write_addr[send_lans_cnt][5:0];
+end
+
+always_comb begin
+    data_start_idx_o = dram_write_addr[send_lans_cnt][5:1];
+
+    if((dram_write_length - dram_write_length_cnt) < (dram_write_addr_offset >> 1)) begin
+        data_end_idx_o = data_start_idx_o + (dram_write_length - dram_write_length_cnt - 1);
+    end
+    else begin
+        data_end_idx_o = 31;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        for(int i = 0; i < 4; i++) begin
+            dram_write_addr[i] <= 0;
+        end
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_WRITE_ADDR[0]) begin
+        dram_write_addr[0] <= S_DEVICE_data_i;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_WRITE_ADDR[1]) begin
+        dram_write_addr[1] <= S_DEVICE_data_i;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_WRITE_ADDR[2]) begin
+        dram_write_addr[2] <= S_DEVICE_data_i;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_WRITE_ADDR[3]) begin
+        dram_write_addr[3] <= S_DEVICE_data_i;
+    end
+    else if (write_dram_curr_state == SEND_REQ_S) begin
+        dram_write_addr[send_lans_cnt] <= dram_write_addr[send_lans_cnt] + dram_write_addr_offset; 
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        num_lans <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == NUM_LANS_ADDR) begin
+        num_lans <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        dram_write_length <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_WRITE_LEN) begin
+        dram_write_length <= S_DEVICE_data_i;
+    end
+end
+
+// ERROR
+//dram_write_length_cnt NEED RESET
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        send_lans_cnt <= 0;
+        dram_write_length_cnt <= 0;
+    end
+    else if(write_dram_curr_state == IDLE_S) begin
+        send_lans_cnt <= 0;
+        dram_write_length_cnt <= 0;
+    end
+    else if (write_dram_curr_state == SEND_REQ_S) begin   
+        if(dram_write_length_cnt + (dram_write_addr_offset >> 1) >= dram_write_length) begin
+            dram_write_length_cnt <= 0;
+            send_lans_cnt <= send_lans_cnt + 1;
+        end
+        else begin
+            dram_write_length_cnt <= dram_write_length_cnt + 
+                                 (dram_write_addr_offset >> 1);
+        end
+        
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    for(int i = 0; i < 4; i++) begin
+        for(int j = 0; j < 4; j++) begin
+            if(write_dram_curr_state == WAIT_GEMM_DATA_S && ret_valid) begin
+                // dram_data_r[i][output_recv_cnt*4 + j] <= P_data_out[i][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+                dram_data_r[i][dram_addr_offset*4 + j] <= P_data_out[i][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+            end
+        end
+    end
+end
+
+logic [4:0] v = dram_write_addr[send_lans_cnt][5:1];
+
+
+always_ff @( posedge clk_i ) begin
+    for(int i = 0; i < 32; i++) begin
+        if(sw_write_dram_mode) begin
+            dram_data_reorder_r[i] <= tpu_param_1_in;
+        end
+        else begin
+            dram_data_reorder_r[v + i] <= dram_data_r[send_lans_cnt][dram_write_length_cnt + i];
+        end
+    end
+end
+always_comb begin
+    dram_data_o = {dram_data_reorder_r[17], dram_data_reorder_r[16],
+                   dram_data_reorder_r[19], dram_data_reorder_r[18],
+                   dram_data_reorder_r[21], dram_data_reorder_r[20],
+                   dram_data_reorder_r[23], dram_data_reorder_r[22],
+                   dram_data_reorder_r[25], dram_data_reorder_r[24],
+                   dram_data_reorder_r[27], dram_data_reorder_r[26],
+                   dram_data_reorder_r[29], dram_data_reorder_r[28],
+                   dram_data_reorder_r[31], dram_data_reorder_r[30],
+        
+                   dram_data_reorder_r[ 1], dram_data_reorder_r[ 0],
+                   dram_data_reorder_r[ 3], dram_data_reorder_r[ 2],
+                   dram_data_reorder_r[ 5], dram_data_reorder_r[ 4],
+                   dram_data_reorder_r[ 7], dram_data_reorder_r[ 6],
+                   dram_data_reorder_r[ 9], dram_data_reorder_r[ 8],
+                   dram_data_reorder_r[11], dram_data_reorder_r[10],
+                   dram_data_reorder_r[13], dram_data_reorder_r[12],
+                   dram_data_reorder_r[15], dram_data_reorder_r[14]};
 end
 
 endmodule

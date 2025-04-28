@@ -86,7 +86,7 @@ logic [DATA_WIDTH-1 : 0] col_3_reg [0:2];
 //#########################
 //    4 X 4 PE SIGNAL
 //#########################
-logic          [4:0]     pe_busy   ;
+logic          [15 : 0]     pe_busy   ;
 logic [DATA_WIDTH-1 : 0] data_in   [0:3];
 logic [DATA_WIDTH-1 : 0] weight_in [0:3];
 

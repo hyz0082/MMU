@@ -31,6 +31,11 @@ module TPU
     input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in,
     input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_in,
     input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_in,
+
+    output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_out,
+    output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_out,
+    output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_out,
+    output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_out,
     /////////// DRAM input  ///////////////////////////////////////////////
     // input   logic   [DATA_WIDTH-1 : 0]   data_1_in,
     // input   logic   [DATA_WIDTH-1 : 0]   data_2_in,
@@ -437,6 +442,10 @@ end
 //#      SEND OUTPUT      #
 //#########################
 always_comb begin
+    tpu_data_1_out = P_data_out_reg[0];
+    tpu_data_2_out = P_data_out_reg[1];
+    tpu_data_3_out = P_data_out_reg[2];
+    tpu_data_4_out = P_data_out_reg[3];
     if(curr_state == OUTPUT_3_S) begin
         ret_valid = 1;
         case (param_1_in_reg)  //DATA_WIDTH
