@@ -30,7 +30,10 @@ module data_feeder
 (* mark_debug="true" *)     input  logic          fifo_data_empty_i,
     output logic          fifo_data_rd_en_o,
     input logic[255 : 0] dram_read_data_h_i,
-    input logic[255 : 0] dram_read_data_l_i
+    input logic[255 : 0] dram_read_data_l_i,
+
+    input logic dram_write_done_fifo_empty_i,
+    input logic dram_write_done_i
 );
 
 localparam TPU_CMD_ADDR  = 32'hC4000000;
@@ -81,7 +84,8 @@ typedef enum {IDLE_S,
               WAIT_GEMM_DATA_S,
               WRITE_DRAM_DATA_S,
               WAIT_GEMM_IDLE_S,
-              DUMMY_1_S
+              DUMMY_1_S,
+              WAIT_WRITE_DONE_S
               } state_t;
 (* mark_debug="true" *) state_t send_req_curr_state;
 state_t send_req_next_state;
@@ -166,13 +170,14 @@ logic [6 : 0] addr_offset;
  */
 logic [ADDR_BITS-1  : 0] output_recv_cnt;
 logic [ADDR_BITS-1  : 0] dram_addr_offset;
-logic [DATA_WIDTH-1 : 0] dram_data_r [0 : 3][0 : 140];
-(* mark_debug="true" *) logic [DATA_WIDTH-1 : 0] dram_data_reorder_r [0 : 31];
+logic [DATA_WIDTH-1 : 0] dram_data_r [0 : 150];
+
+(* mark_debug="true" *) logic [DATA_WIDTH-1 : 0] dram_data_reorder_r [0 : 69];
 logic [XLEN-1 : 0]       dram_write_addr [0 : 3];
 logic [ADDR_BITS-1  : 0] dram_write_length;
 (* mark_debug="true" *) logic [ADDR_BITS-1  : 0] dram_write_length_cnt;
 logic [ADDR_BITS-1  : 0] target_idx;
-(* mark_debug="true" *) logic [7 : 0] num_lans, send_lans_cnt;
+(* mark_debug="true" *) logic [7 : 0] num_lans;//, send_lans_cnt;
 logic [DATA_WIDTH*4-1 : 0] P_data_out_r [0 : 3];
 (* mark_debug="true" *) logic [DATA_WIDTH*4-1 : 0] P_data_out [0 : 3];
 
@@ -379,10 +384,10 @@ end
 
 always_comb begin
     dram_addr_o = (send_req_curr_state == SEND_REQ_S) ? addr
-                                                      : dram_write_addr[send_lans_cnt];
+                                                      : dram_write_addr[num_lans];
     dram_addr_valid_o = (send_req_curr_state == SEND_REQ_S) || 
                         (write_dram_curr_state == SEND_REQ_S);
-    //b000 for write command, 3'b001 for read command
+    //b000 for read command, 3'b001 for write command
     rw_o = (send_req_curr_state == SEND_REQ_S) ? 0
                                                : 1;
 end
@@ -575,14 +580,18 @@ always_comb begin
                         write_dram_next_state = SEND_REQ_S;
                       else
                         write_dram_next_state = WAIT_FIFO_ADDR_S;
-    SEND_REQ_S: if(send_lans_cnt + 1 == num_lans && 
-                   dram_write_length_cnt + (dram_write_addr_offset >> 1) >= dram_write_length)
-                    write_dram_next_state = IDLE_S;
-                else 
-                    write_dram_next_state = WAIT_FIFO_ADDR_S;
+    SEND_REQ_S: write_dram_next_state = WAIT_WRITE_DONE_S;
+    WAIT_WRITE_DONE_S:  if(!dram_write_done_fifo_empty_i && 
+                            dram_write_length_cnt >= dram_write_length)
+                                write_dram_next_state = IDLE_S;
+                        else if(!dram_write_done_fifo_empty_i)
+                                write_dram_next_state = WAIT_FIFO_ADDR_S;
+                       else write_dram_next_state = WAIT_WRITE_DONE_S;
     default: write_dram_next_state = IDLE_S;
     endcase
 end
+
+// write len may less than 32
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
@@ -592,7 +601,7 @@ always_ff @( posedge clk_i ) begin
         output_recv_cnt <= output_recv_cnt + 1;
     end
     else if (S_DEVICE_strobe_i && S_DEVICE_addr_i == OUTPUT_RECV_CNT_ADDR ) begin
-        output_recv_cnt <= 0;
+        output_recv_cnt <= S_DEVICE_data_i;
     end
 end
 
@@ -610,11 +619,11 @@ always_ff @( posedge clk_i ) begin
 end
 
 always_comb begin
-    dram_write_addr_offset = 64 - dram_write_addr[send_lans_cnt][5:0];
+    dram_write_addr_offset = 64 - dram_write_addr[num_lans][5:0];
 end
 
 always_comb begin
-    data_start_idx_o = dram_write_addr[send_lans_cnt][5:1];
+    data_start_idx_o = dram_write_addr[num_lans][5:1];
 
     if((dram_write_length - dram_write_length_cnt) < (dram_write_addr_offset >> 1)) begin
         data_end_idx_o = data_start_idx_o + (dram_write_length - dram_write_length_cnt - 1);
@@ -643,7 +652,7 @@ always_ff @( posedge clk_i ) begin
         dram_write_addr[3] <= S_DEVICE_data_i;
     end
     else if (write_dram_curr_state == SEND_REQ_S) begin
-        dram_write_addr[send_lans_cnt] <= dram_write_addr[send_lans_cnt] + dram_write_addr_offset; 
+        dram_write_addr[num_lans] <= dram_write_addr[num_lans] + dram_write_addr_offset; 
     end
 end
 
@@ -670,38 +679,39 @@ end
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
-        send_lans_cnt <= 0;
+        // send_lans_cnt <= 0;
         dram_write_length_cnt <= 0;
     end
     else if(write_dram_curr_state == IDLE_S) begin
-        send_lans_cnt <= 0;
+        // send_lans_cnt <= 0;
         dram_write_length_cnt <= 0;
     end
     else if (write_dram_curr_state == SEND_REQ_S) begin   
-        if(dram_write_length_cnt + (dram_write_addr_offset >> 1) >= dram_write_length) begin
-            dram_write_length_cnt <= 0;
-            send_lans_cnt <= send_lans_cnt + 1;
-        end
-        else begin
+        // if(dram_write_length_cnt + (dram_write_addr_offset >> 1) >= dram_write_length) begin
+        //     dram_write_length_cnt <= 0;
+        //     // send_lans_cnt <= send_lans_cnt + 1;
+        // end
+        // else begin
+            // ??
             dram_write_length_cnt <= dram_write_length_cnt + 
                                  (dram_write_addr_offset >> 1);
-        end
+        // end
         
     end
 end
 
 always_ff @( posedge clk_i ) begin
-    for(int i = 0; i < 4; i++) begin
+    // for(int i = 0; i < 4; i++) begin
         for(int j = 0; j < 4; j++) begin
             if(write_dram_curr_state == WAIT_GEMM_DATA_S && ret_valid) begin
                 // dram_data_r[i][output_recv_cnt*4 + j] <= P_data_out[i][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                dram_data_r[i][dram_addr_offset*4 + j] <= P_data_out[i][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+                dram_data_r[dram_addr_offset*4 + j] <= P_data_out[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
             end
         end
-    end
+    // end
 end
 
-logic [4:0] v = dram_write_addr[send_lans_cnt][5:1];
+logic [4:0] v = dram_write_addr[num_lans][5:1];
 
 
 always_ff @( posedge clk_i ) begin
@@ -710,7 +720,7 @@ always_ff @( posedge clk_i ) begin
             dram_data_reorder_r[i] <= tpu_param_1_in;
         end
         else begin
-            dram_data_reorder_r[v + i] <= dram_data_r[send_lans_cnt][dram_write_length_cnt + i];
+            dram_data_reorder_r[v + i] <= dram_data_r[dram_write_length_cnt + i];
         end
     end
 end
