@@ -580,13 +580,17 @@ always_comb begin
                         write_dram_next_state = SEND_REQ_S;
                       else
                         write_dram_next_state = WAIT_FIFO_ADDR_S;
-    SEND_REQ_S: write_dram_next_state = WAIT_WRITE_DONE_S;
-    WAIT_WRITE_DONE_S:  if(!dram_write_done_fifo_empty_i && 
-                            dram_write_length_cnt >= dram_write_length)
-                                write_dram_next_state = IDLE_S;
-                        else if(!dram_write_done_fifo_empty_i)
-                                write_dram_next_state = WAIT_FIFO_ADDR_S;
-                       else write_dram_next_state = WAIT_WRITE_DONE_S;
+    // SEND_REQ_S: write_dram_next_state = WAIT_WRITE_DONE_S;
+    SEND_REQ_S: if(dram_write_length_cnt + (dram_write_addr_offset >> 1) >= dram_write_length)
+                    write_dram_next_state = IDLE_S;
+                else
+                    write_dram_next_state = WAIT_FIFO_ADDR_S;
+    // WAIT_WRITE_DONE_S:  if(!dram_write_done_fifo_empty_i && 
+    //                         dram_write_length_cnt >= dram_write_length)
+    //                             write_dram_next_state = IDLE_S;
+    //                     else if(!dram_write_done_fifo_empty_i)
+    //                             write_dram_next_state = WAIT_FIFO_ADDR_S;
+    //                    else write_dram_next_state = WAIT_WRITE_DONE_S;
     default: write_dram_next_state = IDLE_S;
     endcase
 end
