@@ -104,6 +104,10 @@ localparam  SET_MAX_POOLING = 18; // whole
 localparam  SET_DIVISOR = 19; // whole
 localparam  SET_SOFTMAX = 20; // whole
 localparam  TRIGGER_SOFTMAX = 21; // whole
+localparam  SET_MODE = 22; // param_1: mode
+                           // param_2: len
+localparam  TRIGGER_ADD = 23; 
+localparam  SET_RELU = 24; 
 
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
@@ -118,6 +122,10 @@ typedef enum {IDLE_S, HW_RESET_S,
               NEXT_COL_S,
               PRELOAD_DATA_S,
               BN_S,
+              FMA_1_S,
+              FMA_2_S,
+              FMA_3_S,
+              FMA_WAIT_IDLE_S,
               WAIT_BN_S,
               STORE_BN_S,
               BN_INC_S,
@@ -135,7 +143,7 @@ typedef enum {IDLE_S, HW_RESET_S,
               OUTPUT_1_S,
               OUTPUT_2_S,
               OUTPUT_3_S} state_t;
-state_t curr_state, next_state;
+(* mark_debug="true" *)    state_t curr_state, next_state;
 
 
 typedef enum {SW_READ,   SW_WRITE,
@@ -238,13 +246,47 @@ logic [8:0] sa_in_cnt, sa_forward_cnt;
 //#########################
 //#    BN CTRL SIGNAL   #
 //#########################
+/*
+ * mode: 0 -> conv
+ * mode: 1 -> BatchNorm
+ * mode: 2 -> skip add
+ */
 logic   [DATA_WIDTH*4-1 : 0]   tpu_data [0 : 3];
-logic mode;
+(* mark_debug="true" *)    logic [1 : 0] mode;
 logic   [ADDR_BITS-1  : 0]   bn_len;
 logic   [ADDR_BITS-1  : 0]   bn_cnt;
 logic   [DATA_WIDTH*4-1 : 0] bn_data_out [0 : 3];
 logic bn_valid;
 logic bn_valid_reg;
+
+/*
+ * BatchNorm and add signal 
+ * 
+ */
+logic   [DATA_WIDTH-1   : 0]  fma_a_data  [0 : 3];
+logic                         fma_a_valid [0 : 3];
+logic   [DATA_WIDTH-1   : 0]  fma_b_data  [0 : 3];
+logic                         fma_b_valid [0 : 3];
+logic   [DATA_WIDTH-1   : 0]  fma_c_data  [0 : 3];
+logic                         fma_c_valid [0 : 3];
+logic   [DATA_WIDTH-1   : 0]  fma_out        [0 : 3];
+logic   [DATA_WIDTH-1   : 0]  fma_out_relu   [0 : 3];
+logic                         fma_out_valid   [0 : 3];
+(* mark_debug="true" *)    logic                         fma_out_valid_r [0 : 3];
+(* mark_debug="true" *)    logic   [DATA_WIDTH*4-1 : 0]  fma_out_r;
+(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  sram_r_idx [0 : 3];
+(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  sram_w_idx;
+
+// logic   [ADDR_BITS-1    : 0]  calc_num;
+(* mark_debug="true" *)    logic                         relu_en;
+
+(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  send_cnt;
+(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  recv_cnt;
+(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  calc_len;
+
+(* mark_debug="true" *)    logic   [DATA_WIDTH-1 : 0] mul_val_r;
+(* mark_debug="true" *)    logic   [DATA_WIDTH-1 : 0] add_val_r;
+
 
 //#########################
 //#  MAX POOLING SIGNAL   #
@@ -290,6 +332,9 @@ always_ff @( posedge clk_i ) begin
     else if(tpu_cmd_valid && tpu_cmd == SET_FIX_MAC_MODE) begin
         mode <= 1;
         bn_len <= tpu_param_1_in;
+    end
+    else if(tpu_cmd_valid && tpu_cmd == SET_MODE) begin
+        mode <= tpu_param_1_in;
     end
 end
 
@@ -347,7 +392,7 @@ always_comb begin
             else if(tpu_cmd_valid && tpu_cmd == TRIGGER_BN    ) next_state = BN_S;
             else if(tpu_cmd_valid && tpu_cmd == SET_SOFTMAX    ) next_state = WAIT_SF_ACC_S;
             else if(tpu_cmd_valid && tpu_cmd == TRIGGER_SOFTMAX    ) next_state = WAIT_SF_S;
-            
+            else if(tpu_cmd_valid && tpu_cmd == TRIGGER_ADD) next_state = FMA_1_S;
             else         next_state = IDLE_S;
     HW_RESET_S    : next_state = IDLE_S;
     LOAD_IDX_S    : next_state = PRELOAD_DATA_S;
@@ -379,6 +424,16 @@ always_comb begin
     BN_INC_S: next_state = BN_INC_2_S;
     BN_INC_2_S: next_state = BN_INC_3_S;
     BN_INC_3_S: next_state = BN_S;
+    FMA_1_S: next_state = FMA_2_S;
+    FMA_2_S: next_state = FMA_3_S;
+    FMA_3_S: if(send_cnt + 4 >= calc_len) 
+                next_state = FMA_WAIT_IDLE_S;
+             else
+                next_state = FMA_3_S;
+    FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len)
+                        next_state = IDLE_S;
+                     else
+                        next_state = FMA_WAIT_IDLE_S;
     WAIT_SF_ACC_S: if(exp_acc_valid) next_state = IDLE_S;
                    else next_state = WAIT_SF_ACC_S;
     WAIT_SF_S: if(softmax_result_valid) next_state = IDLE_S;
@@ -1131,11 +1186,11 @@ for (genvar i = 0; i < 4; i++) begin
     .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
     )
     gbuff (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .wr_en(gbuff_wr_en[i]),
-        .index(gbuff_index[i]),
-        .data_in(gbuff_data_in[i]),
+        .clk_i   (clk_i),
+        .rst_i   (rst_i),
+        .wr_en   ((mode) ? 0             : gbuff_wr_en[i]),
+        .index   ((mode) ? sram_r_idx[i] : gbuff_index[i]),
+        .data_in (gbuff_data_in[i]),
         .data_out(gbuff_data_out[i])
     );
 end
@@ -1151,11 +1206,11 @@ for (genvar i = 0; i < 4; i++) begin
     .DATA_BITS(DATA_WIDTH)
     )
     weight (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .wr_en(weight_wr_en[i]),
-        .index(weight_index[i]),
-        .data_in(weight_in[i]),
+        .clk_i   (clk_i),
+        .rst_i   (rst_i),
+        .wr_en   ((mode) ? 0             : weight_wr_en[i]),
+        .index   ((mode) ? sram_r_idx[i] : weight_index[i]),
+        .data_in (weight_in[i]),
         .data_out(weight_out[i])
     );
 end
@@ -1191,13 +1246,172 @@ for (genvar i = 0; i < 4; i++) begin
     .DATA_BITS(DATA_WIDTH*4)
     )
     P_gbuff (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .wr_en(P_wr_en[i]),
-        .index(P_index[i]),
-        .data_in(P_data_in[i]),
+        .clk_i   (clk_i),
+        .rst_i   (rst_i),
+        .wr_en   ((mode) ? fma_out_valid_r[i] : P_wr_en[i]),
+        .index   ((mode) ? sram_w_idx         : P_index[i]),
+        .data_in ((mode) ? fma_out_r          : P_data_in[i]),
         .data_out(P_data_out[i])
     );
 end
 endgenerate
+
+/*
+ * BatchNorm and skip add ctrl signal
+ */
+
+always_ff @( posedge clk_i ) begin
+    if(tpu_cmd_valid && tpu_cmd == SET_RELU) begin
+        relu_en <= tpu_param_1_in;
+    end
+end
+always_ff @( posedge clk_i ) begin
+    if(tpu_cmd_valid && tpu_cmd == SET_MODE) begin
+        calc_len <= tpu_param_2_in;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(tpu_cmd_valid && tpu_cmd == SET_MUL_VAL) begin
+        mul_val_r <= tpu_param_2_in;
+    end
+    if(tpu_cmd_valid && tpu_cmd == SET_ADD_VAL) begin
+        add_val_r <= tpu_param_2_in;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        send_cnt <= 0;
+    end
+    else if(curr_state == IDLE_S) begin
+        send_cnt <= 0;
+    end
+    else if(curr_state == FMA_3_S) begin
+        send_cnt <= send_cnt + 4;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        recv_cnt <= 0;
+    end
+    else if(curr_state == IDLE_S) begin
+        recv_cnt <= 0;
+    end
+    else if(fma_out_valid_r[0]) begin
+        recv_cnt <= recv_cnt + 4;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        sram_r_idx[0] <= 0;
+        sram_r_idx[1] <= 1;
+        sram_r_idx[2] <= 2;
+        sram_r_idx[3] <= 3;
+    end
+    else if(curr_state == IDLE_S) begin
+        sram_r_idx[0] <= 0;
+        sram_r_idx[1] <= 1;
+        sram_r_idx[2] <= 2;
+        sram_r_idx[3] <= 3;
+    end
+    else if(curr_state == FMA_1_S || 
+            curr_state == FMA_2_S || 
+            curr_state == FMA_3_S) begin
+        sram_r_idx[0] <= sram_r_idx[0] + 4;
+        sram_r_idx[1] <= sram_r_idx[1] + 4;
+        sram_r_idx[2] <= sram_r_idx[2] + 4;
+        sram_r_idx[3] <= sram_r_idx[3] + 4;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        sram_w_idx <= 0;
+    end
+    else if(curr_state == IDLE_S) begin
+        sram_w_idx <= 0;
+    end
+    else if(fma_out_valid_r[0] == 1) begin
+        sram_w_idx <= sram_w_idx + 1;
+    end
+end
+
+generate
+    always_ff @( posedge clk_i ) begin
+        for (int i = 0; i < 4; i++) begin
+            fma_out_valid_r[i] <= fma_out_valid[i];
+        end
+    end
+endgenerate
+
+generate
+    always_comb begin
+        for (int i = 0; i < 4; i++) begin
+            if(fma_out[i][15]) begin
+                fma_out_relu[i] <= 0;
+            end
+            else begin
+                fma_out_relu[i] <= fma_out[i];
+            end
+        end
+    end
+endgenerate
+
+generate
+    always_ff @( posedge clk_i ) begin
+        if(fma_out_valid[0] && !relu_en) begin
+            fma_out_r <= {fma_out[0], fma_out[1], 
+                          fma_out[2], fma_out[3]};
+        end
+        else if(fma_out_valid[0] && relu_en) begin
+            fma_out_r <= {fma_out_relu[0], fma_out_relu[1], 
+                          fma_out_relu[2], fma_out_relu[3]};
+        end
+    end
+endgenerate
+/*
+ * BatchNorm: a * b + c
+ * skip add : a * 1 + c
+ */
+always_comb begin
+    for (int i = 0; i < 4; i++) begin
+        fma_a_data[i] = gbuff_data_out_reg[i];
+        fma_b_data[i] = (mode == 1) ? mul_val_r : 16'h3c00;
+        fma_c_data[i] = (mode == 1) ? add_val_r : weight_out_reg[i];
+
+        fma_a_valid[i] = (curr_state == FMA_3_S/**/);
+        fma_b_valid[i] = (curr_state == FMA_3_S/**/);
+        fma_c_valid[i] = (curr_state == FMA_3_S/**/);
+    end     
+end
+
+/*
+ * BatchNorm and skip add ip
+ */
+
+generate
+for (genvar i = 0; i < 4; i++) begin
+    floating_point_0 FP(
+
+        .aclk(clk_i),
+
+        .s_axis_a_tdata(fma_a_data[i]),
+        .s_axis_a_tvalid(fma_a_valid[i]),
+
+        .s_axis_b_tdata(fma_b_data[i]),
+        .s_axis_b_tvalid(fma_b_valid[i]),
+
+        .s_axis_c_tdata(fma_c_data[i]),
+        .s_axis_c_tvalid(fma_c_valid[i]),
+
+        .m_axis_result_tdata(fma_out[i]),
+        .m_axis_result_tvalid(fma_out_valid[i])
+    );
+end
+endgenerate
+
+
 endmodule
