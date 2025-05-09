@@ -209,34 +209,34 @@ void max_pooling_layer_forward_propagation(struct list_node *ptr, unsigned int h
 
     //###########################################################
     // print output tensor
-    if(1)
-    {
-        printf("output:\n");
-        printf("\n\n[%s]\n", entry->base.layer_name_);
-        printf("shape depth:%d,  height:%d width:%d\n", (int)out_.depth_, (int)out_.height_, (int)out_.width_);
-        printf("    ");
-        for(int i = 0; i < out_.width_; i++) {
-            printf("%6d ", (i));
-        }
-        printf("\n");
-        // const my_float_t *pi = &out[0];
-        int p_cnt = 0;
-        for (int inc = 0; inc < out_.depth_; inc++) {
-            printf("\n[depth%d]\n", inc);
-            // const my_float_t *pi = &in[get_index(&in_padded_, 0, 0, inc)];
-            for (int h = 0; h < out_.height_; h++) {
-                printf("%3d ", (h));
-                printf("[ ");
-                for (uint64_t w = 0; w < out_.width_; w++) {
-                    // printf("%2.6f ", ((float)out[p_cnt]));
-                    printf("%2.6f ", ((float_t)read_dram_value_cmd(&out[p_cnt])));
+    // if(1)
+    // {
+    //     printf("output:\n");
+    //     printf("\n\n[%s]\n", entry->base.layer_name_);
+    //     printf("shape depth:%d,  height:%d width:%d\n", (int)out_.depth_, (int)out_.height_, (int)out_.width_);
+    //     printf("    ");
+    //     for(int i = 0; i < out_.width_; i++) {
+    //         printf("%6d ", (i));
+    //     }
+    //     printf("\n");
+    //     // const my_float_t *pi = &out[0];
+    //     int p_cnt = 0;
+    //     for (int inc = 0; inc < out_.depth_; inc++) {
+    //         printf("\n[depth%d]\n", inc);
+    //         // const my_float_t *pi = &in[get_index(&in_padded_, 0, 0, inc)];
+    //         for (int h = 0; h < out_.height_; h++) {
+    //             printf("%3d ", (h));
+    //             printf("[ ");
+    //             for (uint64_t w = 0; w < out_.width_; w++) {
+    //                 // printf("%2.6f ", ((float)out[p_cnt]));
+    //                 printf("%2.6f ", ((float_t)read_dram_value_cmd(&out[p_cnt])));
                     
-                    p_cnt++;
-                }
-                printf("]\n");
-            }
-        }
-    }
+    //                 p_cnt++;
+    //             }
+    //             printf("]\n");
+    //         }
+    //     }
+    // }
     //###########################################################
 
 #ifdef PRINT_LAYER

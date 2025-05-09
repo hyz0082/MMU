@@ -109,7 +109,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
     int max_len = 4096;
     // set_bn_cmd(max_len/16);
     if(bn_cnt == 990) {
-        
+        set_bn_cmd(max_len/16);
         int pad_size = 114*114*64;
         my_float_t *pad_ptr = (my_float_t *)malloc(pad_size * sizeof(my_float_t));
         if (pad_ptr != NULL) { // Check if memory was allocated
@@ -226,8 +226,6 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             /*
              * send data
              */
-            // send_param1_cmd(60000);
-            // send_param2_cmd(60000);
             reset_sram_offset_cmd();
             set_length_cmd(remain_len);
             set_dram_read_input_cmd();

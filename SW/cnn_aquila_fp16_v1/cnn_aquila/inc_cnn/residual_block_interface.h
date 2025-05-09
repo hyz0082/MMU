@@ -31,6 +31,11 @@ residual_block_interface * get_residual_block_interface_entry(struct list_node *
 
 void residual_block_interface_forward_propagation(struct list_node *ptr, unsigned int hart_id, input_struct *input)
 {
+#ifdef USING_GEM5
+    clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
+    clock_t hardware_compute_time = 0;
+    tick = clock();
+#endif
     static int block_cnt = 0;
     residual_block_interface *entry = get_residual_block_interface_entry(ptr);
 
@@ -102,10 +107,10 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
     //     entry->base.out_ptr_ = entry->base.a_ptr_;
     // // }
 
-#ifdef USING_GEM5
-    clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC;
-    tick = clock();
-#endif
+// #ifdef USING_GEM5
+//     clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC;
+//     tick = clock();
+// #endif
 
     entry->base.a_ptr_ = out0;
     entry->base.out_ptr_ = entry->base.a_ptr_;
@@ -120,7 +125,7 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
     uint64_t blocksize = compute_block_size(total_size);
     uint64_t start = (blocksize) * hart_id;
     uint64_t end = min((blocksize) * (hart_id+1), total_size);
-    int max_len = 100;
+    
     my_float_t *pi = out0;
     my_float_t *pj = out1;
     // my_float_t *po = out;
@@ -146,8 +151,10 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
     /*
      * hw version
      */
+    // 112 is correct
+    int max_len = 10;
     if(source)
-    for (uint64_t i = start; i < end; i+=100)
+    for (uint64_t i = start; i < end; i += max_len)
     {
         int remain_len = min(max_len, end - i);
         /*
@@ -161,6 +168,9 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
         wait_idle_cmd();
+        __asm__ volatile ("nop");
+        __asm__ volatile ("nop");
+        __asm__ volatile ("nop");
 
         /*
          * send out1
@@ -172,6 +182,9 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
         wait_idle_cmd();
+        __asm__ volatile ("nop");
+        __asm__ volatile ("nop");
+        __asm__ volatile ("nop");
 
         /*
          * calc add
@@ -194,6 +207,19 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
 
         pi += remain_len;
         pj += remain_len;
+        __asm__ volatile ("nop");
+        
+#ifdef USING_GEM5
+        clock_t  tmp_tick = clock();
+#endif
+            // trigger_bn_cmd();
+            // wait_idle_cmd();
+#ifdef USING_GEM5
+        hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+        tmp_tick = clock();
+        hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/100);
+        // printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
+#endif
     }
    
     free(out1);
@@ -270,6 +296,7 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
 #ifdef USING_GEM5
     tick = (clock() - tick)/ticks_per_msec;
     printf("It took %ld msec to perform residual.\n\n", tick);
+    printf("It took %ld msec to perform res_HW.\n\n", hardware_compute_time);
 #endif
 }
 

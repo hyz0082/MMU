@@ -228,6 +228,10 @@ void trigger_bn_cmd() {
 void wait_idle_cmd() {
     while((*BUSY_ADDR));
     __asm__ volatile ("nop");
+    while((*BUSY_ADDR));
+    __asm__ volatile ("nop");
+    while((*BUSY_ADDR));
+    __asm__ volatile ("nop");
 }
 
 my_float_t read_data_cmd(int offset, int pos) {
