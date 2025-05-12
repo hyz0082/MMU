@@ -126,6 +126,8 @@ typedef enum {IDLE_S, HW_RESET_S,
               FMA_2_S,
               FMA_3_S,
               FMA_WAIT_IDLE_S,
+              START_POOLING_S,
+              WAIT_POOLING_S,
               WAIT_BN_S,
               STORE_BN_S,
               BN_INC_S,
@@ -288,9 +290,19 @@ logic                         fma_out_valid   [0 : 3];
 (* mark_debug="true" *)    logic   [DATA_WIDTH-1 : 0] add_val_r;
 
 
-//#########################
-//#  MAX POOLING SIGNAL   #
-//#########################
+/*
+ * MAX POOLING SIGNAL (NEW)
+ * 9 COMPARATER FOR MAX POOLING
+ * 1 ACCUMULATOR FOR AVERAGE POOLING
+ */
+logic   [DATA_WIDTH-1   : 0] pooling_data_r [0 : 51];
+logic   [ADDR_BITS-1    : 0] pooling_index;
+logic   [DATA_WIDTH-1   : 0] pooling_result;
+logic pooling_type; // 0: max pooling, 1: average pooling
+
+/*
+ * MAX POOLING SIGNAL (OLD)
+ */
 logic enable_max_pooling;
 logic   [DATA_WIDTH-1 : 0] max_pooling_data [0 : 19];
 logic                      max_pooling_data_valid [0 : 20];
@@ -430,10 +442,17 @@ always_comb begin
                 next_state = FMA_WAIT_IDLE_S;
              else
                 next_state = FMA_3_S;
-    FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len)
+    FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len && !enable_max_pooling)
                         next_state = IDLE_S;
+                     else if(recv_cnt + 4 >= calc_len && enable_max_pooling)
+                        next_state = START_POOLING_S;
                      else
                         next_state = FMA_WAIT_IDLE_S;
+    START_POOLING_S: next_state = WAIT_POOLING_S;
+    WAIT_POOLING_S : if(cmp_result_valid_reg[7]) 
+                        next_state = IDLE_S;
+                     else 
+                        next_state = WAIT_POOLING_S;
     WAIT_SF_ACC_S: if(exp_acc_valid) next_state = IDLE_S;
                    else next_state = WAIT_SF_ACC_S;
     WAIT_SF_S: if(softmax_result_valid) next_state = IDLE_S;
@@ -1094,6 +1113,19 @@ floating_point_div div(
 //#########################
 //    AVG / MAX POOLING
 //#########################
+
+/*
+ * store BatchNorm output
+ */
+always_ff @( posedge clk_i ) begin
+    if(fma_out_valid_r[0]) begin
+        pooling_data_r[sram_w_idx*4  ] <= fma_out_r[(DATA_WIDTH*4-1)-:DATA_WIDTH];
+        pooling_data_r[sram_w_idx*4+1] <= fma_out_r[(DATA_WIDTH*3-1)-:DATA_WIDTH];
+        pooling_data_r[sram_w_idx*4+2] <= fma_out_r[(DATA_WIDTH*2-1)-:DATA_WIDTH];
+        pooling_data_r[sram_w_idx*4+3] <= fma_out_r[(DATA_WIDTH*1-1)-:DATA_WIDTH];
+    end
+end
+
 always_ff @( posedge clk_i ) begin
     bn_valid_reg <= bn_valid;
     cmp_result_valid_reg <= cmp_result_valid;
@@ -1105,17 +1137,28 @@ always_ff @( posedge clk_i ) begin
             max_pooling_data[i] <= 0;
         end
     end
-    else if(bn_valid_reg) begin
-        max_pooling_data[0]  <= bn_data_out[0][(DATA_WIDTH*4-1)-:DATA_WIDTH];//[127:31];//DATA_WIDTH
-        max_pooling_data[1]  <= bn_data_out[1][(DATA_WIDTH*4-1)-:DATA_WIDTH];
-        max_pooling_data[2]  <= bn_data_out[2][(DATA_WIDTH*4-1)-:DATA_WIDTH];
-        max_pooling_data[3]  <= bn_data_out[3][(DATA_WIDTH*4-1)-:DATA_WIDTH];
-        max_pooling_data[4]  <= bn_data_out[0][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-        max_pooling_data[5]  <= bn_data_out[1][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-        max_pooling_data[6]  <= bn_data_out[2][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-        max_pooling_data[7]  <= bn_data_out[3][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-        max_pooling_data[15] <= bn_data_out[0][(DATA_WIDTH*2-1)-:DATA_WIDTH];
+    else begin
+        max_pooling_data[0]  <= pooling_data_r[0];
+        max_pooling_data[1]  <= pooling_data_r[1];
+        max_pooling_data[2]  <= pooling_data_r[2];
+        max_pooling_data[3]  <= pooling_data_r[3];
+        max_pooling_data[4]  <= pooling_data_r[4];
+        max_pooling_data[5]  <= pooling_data_r[5];
+        max_pooling_data[6]  <= pooling_data_r[6];
+        max_pooling_data[7]  <= pooling_data_r[7];
+        max_pooling_data[15] <= pooling_data_r[8];
     end
+    // else if(bn_valid_reg) begin
+    //     max_pooling_data[0]  <= bn_data_out[0][(DATA_WIDTH*4-1)-:DATA_WIDTH];//[127:31];//DATA_WIDTH
+    //     max_pooling_data[1]  <= bn_data_out[1][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+    //     max_pooling_data[2]  <= bn_data_out[2][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+    //     max_pooling_data[3]  <= bn_data_out[3][(DATA_WIDTH*4-1)-:DATA_WIDTH];
+    //     max_pooling_data[4]  <= bn_data_out[0][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+    //     max_pooling_data[5]  <= bn_data_out[1][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+    //     max_pooling_data[6]  <= bn_data_out[2][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+    //     max_pooling_data[7]  <= bn_data_out[3][(DATA_WIDTH*3-1)-:DATA_WIDTH];
+    //     max_pooling_data[15] <= bn_data_out[0][(DATA_WIDTH*2-1)-:DATA_WIDTH];
+    // end
     // 0 ~ 6
     for(int i = 0; i < 7; i++) begin
         if(cmp_result_valid_reg[i]) begin
@@ -1127,7 +1170,7 @@ end
 
 always_ff @( posedge clk_i ) begin
     for (int i = 0; i < 4; i++) begin
-        if(bn_valid) begin
+        if(curr_state == START_POOLING_S) begin
             cmp_in_valid[i] <= 1;
         end
         else begin

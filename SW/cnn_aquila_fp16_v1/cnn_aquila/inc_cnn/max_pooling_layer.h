@@ -84,6 +84,7 @@ void max_pooling_layer_forward_propagation(struct list_node *ptr, unsigned int h
 {
 #ifdef USING_GEM5
     clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
+    clock_t hardware_compute_time = 0;
     tick = clock();
 #endif
     max_pooling_layer *entry = get_max_pooling_layer_entry(ptr);
@@ -134,18 +135,73 @@ void max_pooling_layer_forward_propagation(struct list_node *ptr, unsigned int h
     else {
         entry->base.out_ptr_ = entry->base.a_ptr_;
     }
+
+    int skip_en = 1;
     /*
      * max pooling
      */
-    pool_copy_and_pad_input(entry, hart_id, input);
+    if(!skip_en) {
+        pool_copy_and_pad_input(entry, hart_id, input);
+    }
+    
     // remove
-    // my_float_t *dst = entry->base.out_ptr_;
-    // my_float_t *src = input->in_ptr_;
-    // for(int i = 0; i < entry->base.out_size_; i++) {
-    //     // entry->base.out_ptr_[i] = input->in_ptr_[i];
-    //     // write_dram_value_cmd(dst + i, read_dram_value_cmd(src + i));
-    //     write_dram_value_cmd(&entry->base.out_ptr_[i], read_dram_value_cmd(&input->in_ptr_[i]));
-    // }
+    if(skip_en) {
+    my_float_t *dst = entry->base.out_ptr_;
+    my_float_t *src = input->in_ptr_;
+    int max_len = 112;
+    my_float_t *pimg = dst;
+    my_float_t *pin  = src;
+    for(int i = 0; i < entry->base.out_size_; i+=max_len) {
+        // entry->base.out_ptr_[i] = input->in_ptr_[i];
+        // write_dram_value_cmd(dst + i, read_dram_value_cmd(src + i));
+        // write_dram_value_cmd(&entry->base.out_ptr_[i], read_dram_value_cmd(&input->in_ptr_[i]));
+        send_bn_mul_data(1, 0);
+        send_bn_add_data(0, 0);
+        
+        int remain_len = min(max_len, entry->base.out_size_ - i);
+        /*
+        * send data
+        */
+        reset_sram_offset_cmd();
+        set_length_cmd(remain_len);
+        set_dram_read_input_cmd();
+        uint32_t tmp_s;
+        memcpy(&tmp_s, &pin, sizeof(tmp_s));
+        set_addr_cmd(tmp_s);
+        trigger_dram_read_cmd();
+        wait_idle_cmd();
+        /*
+        * start BatchNorm
+        */
+        set_mode_cmd(1, remain_len);
+        reset_relu_cmd();
+        trigger_add_cmd();
+        wait_idle_cmd();
+        set_mode_cmd(0, 0);
+
+        /*
+        * write data
+        */
+        set_dram_write_lens_cmd(remain_len);
+        set_num_lans_cmd(0);
+        set_output_recv_cnt_cmd(0);
+        memcpy(&tmp_s, &pimg, sizeof(tmp_s));
+        set_dram_write_addr_cmd(0, tmp_s);
+        set_dram_w_tr_cmd();
+        wait_idle_cmd();
+
+        pin += remain_len;
+        pimg += remain_len; 
+        __asm__ volatile ("nop");
+        
+#ifdef USING_GEM5
+        clock_t  tmp_tick = clock();
+        hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+        tmp_tick = clock();
+        hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/100);
+#endif
+    }
+    }
 
     free(input->in_ptr_);
 
@@ -174,6 +230,7 @@ void max_pooling_layer_forward_propagation(struct list_node *ptr, unsigned int h
     /*
      * max pooling
      */
+    if(!skip_en)
     for (uint64_t o = start; o < end; o++)
     {
         uint32_t tmp_3, tmp_4;

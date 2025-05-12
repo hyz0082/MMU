@@ -133,7 +133,6 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
     /*
      * sw version
      */
-    // 1353 + 6272
     if(!source)
     for (uint64_t i = start; i < end; i++)
     {
@@ -141,18 +140,13 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         if(tmp_s < (my_float_t)0) {
             tmp_s = 0;
         }
-        // if(i >= (1353 + 6272 - 5) && i <= (1353 + 6272 + 5)) {
-        //     printf("%d: %f = %f + %f\n",(int)i, (float)tmp_s, (float)read_dram_value_cmd(&out0[i]), (float)read_dram_value_cmd(&out1[i]));
-        //     printf("%d: %x = %x + %x\n",(int)i, tmp_s, read_dram_value_cmd(&out0[i]), read_dram_value_cmd(&out1[i]));
-        //     printf("\n");
-        // }
         write_dram_value_cmd(&out[i], tmp_s);
     }
     /*
      * hw version
      */
     // 112 is correct
-    int max_len = 10;
+    int max_len = 100;
     if(source)
     for (uint64_t i = start; i < end; i += max_len)
     {
@@ -168,23 +162,17 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
         wait_idle_cmd();
-        __asm__ volatile ("nop");
-        __asm__ volatile ("nop");
-        __asm__ volatile ("nop");
 
         /*
          * send out1
          */
-        set_dram_read_weight_cmd();
         reset_sram_offset_cmd();
         set_length_cmd(remain_len);
+        set_dram_read_weight_cmd();
         memcpy(&tmp_s, &pj, sizeof(tmp_s));
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
         wait_idle_cmd();
-        __asm__ volatile ("nop");
-        __asm__ volatile ("nop");
-        __asm__ volatile ("nop");
 
         /*
          * calc add

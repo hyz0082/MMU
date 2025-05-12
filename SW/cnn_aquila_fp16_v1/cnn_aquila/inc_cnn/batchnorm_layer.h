@@ -106,17 +106,12 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
     uint64_t end = min((blocksize) * (hart_id+1), total_size);
 
     reset_cmd();
-    int max_len = 4096;
-    // set_bn_cmd(max_len/16);
-    if(bn_cnt == 990) {
-        set_bn_cmd(max_len/16);
+    if(bn_cnt == 0) {
         int pad_size = 114*114*64;
         my_float_t *pad_ptr = (my_float_t *)malloc(pad_size * sizeof(my_float_t));
         if (pad_ptr != NULL) { // Check if memory was allocated
             // memset((void*)pad_ptr, 0, pad_size * sizeof(my_float_t));
-            for(int i = 0; i < pad_size; i++) {
-                write_dram_value_cmd(&pad_ptr[i], 0);
-            }
+            reset_dram_value_cmd(pad_ptr, pad_size);
         }
         else {
             printf("Error: Unable to allocate memory for pad_size\n");
@@ -134,30 +129,67 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             int pad_pos = (114 * c + (1 + y)) * 114 + 1;
             my_float_t *pimg = &dst[pad_pos];
             pad_pos = (112 * c + y) * 112 + 0;
-            const my_float_t *pin = &in[pad_pos];
+            my_float_t *pin = &in[pad_pos];
 
-            for (uint64_t x = 0; x < 112; x++)
-            {
-                // pimg[x] = pin[x];
-                write_dram_value_cmd(&pimg[x], read_dram_value_cmd(&pin[x]));
-            }
+            // for (uint64_t x = 0; x < 112; x++)
+            // {
+            //     // pimg[x] = pin[x];
+            //     write_dram_value_cmd(&pimg[x], read_dram_value_cmd(&pin[x]));
+            // }
+            send_bn_mul_data(1, 0);
+            send_bn_add_data(0, 0);
+            // int max_len = 112;
+            int remain_len = 112;//min(max_len, in_.width_ - j);
+            /*
+            * send data
+            */
+            reset_sram_offset_cmd();
+            set_length_cmd(remain_len);
+            set_dram_read_input_cmd();
+            uint32_t tmp_s;
+            memcpy(&tmp_s, &pin, sizeof(tmp_s));
+            set_addr_cmd(tmp_s);
+            trigger_dram_read_cmd();
+            wait_idle_cmd();
+            /*
+            * start BatchNorm
+            */
+            set_mode_cmd(1, remain_len);
+            reset_relu_cmd();
+            trigger_add_cmd();
+            wait_idle_cmd();
+            set_mode_cmd(0, 0);
+ 
+            /*
+            * write data
+            */
+            set_dram_write_lens_cmd(remain_len);
+            set_num_lans_cmd(0);
+            set_output_recv_cnt_cmd(0);
+            memcpy(&tmp_s, &pimg, sizeof(tmp_s));
+            set_dram_write_addr_cmd(0, tmp_s);
+            set_dram_w_tr_cmd();
+            wait_idle_cmd();
+
+            pin += remain_len;
+            pimg += remain_len; 
+            __asm__ volatile ("nop");
+            
+#ifdef USING_GEM5
+            clock_t  tmp_tick = clock();
+            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+            tmp_tick = clock();
+            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/100);
+#endif
         }
-        // }
-        set_bn_cmd(1);
         set_max_pooling_cmd();
         for (uint64_t ch = 0; ch < in_.depth_; ch++){
             my_float_t mul = _gamma(entry, ch) * _invstd(entry, ch);
             my_float_t add = _gamma(entry, ch) * (- _mean(entry, ch)) * _invstd(entry, ch) + _beta(entry, ch);
-            // printf("mul: %f, add:%f\n", (float)mul, (float)add);
+
             send_bn_mul_data(mul, 0);
-            send_bn_mul_data(mul, 1);
-            send_bn_mul_data(mul, 2);
-            send_bn_mul_data(mul, 3);
-    
             send_bn_add_data(add, 0);
-            send_bn_add_data(add, 1);
-            send_bn_add_data(add, 2);
-            send_bn_add_data(add, 3);
+
             for(int y = 0; y < 56; y++) {
                 for(int x = 0; x < 56; x++) {
                     int data_pos = 0;
@@ -180,30 +212,62 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
                         write_dram_value_cmd(&in[pos], curr_max);
                     }
                     else {
-                        for(int py = 0; py < 3; py++) {
-                            for(int px = 0; px < 3; px++) {
-                                uint64_t target_pos = base_pos + py*114+px;
-                                // send_bn_data(pad_ptr[target_pos], data_pos++);
-                                send_bn_data(read_dram_value_cmd(&pad_ptr[target_pos]), data_pos++);
+                        /*
+                         * sw send input
+                         */
+                        // for(int py = 0; py < 3; py++) {
+                        //     for(int px = 0; px < 3; px++) {
+                        //         uint64_t target_pos = base_pos + py*114+px;
+                        //         // send_bn_data(pad_ptr[target_pos], data_pos++);
+                        //         // send_bn_data(read_dram_value_cmd(&pad_ptr[target_pos]), data_pos++);
+                        //         send_data_cmd(read_dram_value_cmd(&pad_ptr[target_pos]), data_pos++);
                                 
-                            }
+                        //     }
+                        // }
+                        /*
+                         * hw send input
+                         */
+                        reset_sram_offset_cmd();
+                        set_length_cmd(3);
+                        set_dram_read_input_cmd();
+                        
+                        for(int py = 0; py < 3; py++) {
+                            // for(int px = 0; px < 3; px++) {
+                            //     uint64_t target_pos = base_pos + py*114+px;
+                            //     // send_bn_data(pad_ptr[target_pos], data_pos++);
+                            //     // send_bn_data(read_dram_value_cmd(&pad_ptr[target_pos]), data_pos++);
+                            //     send_data_cmd(read_dram_value_cmd(&pad_ptr[target_pos]), data_pos++);
+                            // }
+                            uint64_t target_pos = base_pos + py*114;
+                            my_float_t *pi = &pad_ptr[target_pos];
+                            uint32_t tmp_s;
+                            memcpy(&tmp_s, &pi, sizeof(tmp_s));
+                            set_addr_cmd(tmp_s);
+                            trigger_dram_read_cmd();
+                            wait_idle_cmd();
                         }
-                        write_bn_data(0);
-                        __asm__ volatile ("nop");
-                        trigger_bn_cmd();
+                        // wait_idle_cmd();
+
+                        set_mode_cmd(1, 9);
+                        set_relu_cmd();
+                        trigger_add_cmd();
                         wait_idle_cmd();
+                        set_mode_cmd(0, 0);
+                        // trigger_bn_cmd();
+                        // wait_idle_cmd();
                         uint64_t pos = (ch*56*56) + (y*56) + x;
                         // in[pos] = read_max_pooling_cmd();
                         write_dram_value_cmd(&in[pos], read_max_pooling_cmd());
+                        __asm__ volatile ("nop");
+
                     }
-                    // printf("result: %f\n", in[pos]);
                 }
             }
         }
 
-        for (uint64_t i = start; i < entry->base.out_size_; i++) {
-            write_dram_value_cmd(&out[i], max(read_dram_value_cmd(&in[i]), 0));
-        }
+        // for (uint64_t i = start; i < entry->base.out_size_; i++) {
+        //     write_dram_value_cmd(&out[i], max(read_dram_value_cmd(&in[i]), 0));
+        // }
 
         free(pad_ptr);
 #ifdef PRINT_LAYER
@@ -219,7 +283,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
         my_float_t add = _gamma(entry, ch) * (- _mean(entry, ch)) * _invstd(entry, ch) + _beta(entry, ch);
         send_bn_mul_data(mul, 0);
         send_bn_add_data(add, 0);
-        max_len = 100;
+        int max_len = 100;
         my_float_t *pi = in + (ch * dim);
         for (uint64_t j = start; j < end; j += max_len) {
             int remain_len = min(max_len, end - j);
