@@ -126,8 +126,9 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
     uint64_t start = (blocksize) * hart_id;
     uint64_t end = min((blocksize) * (hart_id+1), total_size);
     
-    my_float_t *pi = out0;
-    my_float_t *pj = out1;
+    my_float_t *pi   = out0;
+    my_float_t *pj   = out1;
+    my_float_t *pout = out0;
     // my_float_t *po = out;
     int source = 1;// 0: sw, 1: hw
     /*
@@ -147,7 +148,7 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
      */
     // 112 is correct
     int max_len = 100;
-    if(source)
+    if(source && block_cnt != 15)
     for (uint64_t i = start; i < end; i += max_len)
     {
         int remain_len = min(max_len, end - i);
@@ -161,7 +162,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         memcpy(&tmp_s, &pi, sizeof(tmp_s));
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
-        wait_idle_cmd();
+        // wait_idle_cmd();
+        wait_idle_quick_cmd();
 
         /*
          * send out1
@@ -172,7 +174,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         memcpy(&tmp_s, &pj, sizeof(tmp_s));
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
-        wait_idle_cmd();
+        // wait_idle_cmd();
+        wait_idle_quick_cmd();
 
         /*
          * calc add
@@ -180,7 +183,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         set_mode_cmd(2, remain_len);
         set_relu_cmd();
         trigger_add_cmd();
-        wait_idle_cmd();
+        // wait_idle_cmd();
+        wait_idle_quick_cmd();
         set_mode_cmd(0, 0);
         /*
          * write data
@@ -191,23 +195,78 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         memcpy(&tmp_s, &pi, sizeof(tmp_s));
         set_dram_write_addr_cmd(0, tmp_s);
         set_dram_w_tr_cmd();
-        wait_idle_cmd();
+        // wait_idle_cmd();
+        wait_idle_quick_cmd();
 
         pi += remain_len;
         pj += remain_len;
         __asm__ volatile ("nop");
         
-#ifdef USING_GEM5
-        clock_t  tmp_tick = clock();
-#endif
-            // trigger_bn_cmd();
+// #ifdef USING_GEM5
+//         clock_t  tmp_tick = clock();
+// #endif
+//             // trigger_bn_cmd();
+//             // wait_idle_cmd();
+// #ifdef USING_GEM5
+//         hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+//         tmp_tick = clock();
+//         hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/100);
+//         // printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
+// #endif
+    }
+    else if(source && block_cnt == 15){
+        set_avg_pooling_cmd();
+        max_len = 49;
+        for (uint64_t i = start; i < end; i += max_len)
+        {
+            int remain_len = min(max_len, end - i);
+            /*
+            * send out0
+            */
+            reset_sram_offset_cmd();
+            set_length_cmd(remain_len);
+            set_dram_read_input_cmd();
+            uint32_t tmp_s;
+            memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            set_addr_cmd(tmp_s);
+            trigger_dram_read_cmd();
             // wait_idle_cmd();
-#ifdef USING_GEM5
-        hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
-        tmp_tick = clock();
-        hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/100);
-        // printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
-#endif
+            wait_idle_quick_cmd();
+
+            /*
+            * send out1
+            */
+            reset_sram_offset_cmd();
+            set_length_cmd(remain_len);
+            set_dram_read_weight_cmd();
+            memcpy(&tmp_s, &pj, sizeof(tmp_s));
+            set_addr_cmd(tmp_s);
+            trigger_dram_read_cmd();
+            // wait_idle_cmd();
+            wait_idle_quick_cmd();
+
+            /*
+            * calc add
+            */
+            set_mode_cmd(2, remain_len);
+            set_relu_cmd();
+            trigger_add_cmd();
+            wait_idle_quick_cmd();
+            set_mode_cmd(0, 0);
+            /*
+            * write data
+            */
+            write_dram_value_cmd(pout, read_avg_pooling_cmd());
+            // wait_idle_cmd();
+            wait_idle_quick_cmd();
+
+            pi += remain_len;
+            pj += remain_len;
+            pout += 1;
+            __asm__ volatile ("nop");
+        
+        }
+        reset_cmd();
     }
    
     free(out1);
@@ -274,17 +333,13 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
 
     block_cnt++;
 #ifdef PRINT_LAYER
-    if (hart_id == 0) 
-    {
-        // printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float)out[0], (float)out[1], (float)out[entry->base.out_size_-2], (float)out[entry->base.out_size_-1]);
-        printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float_t)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-2]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
-    }
+    // printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float)out[0], (float)out[1], (float)out[entry->base.out_size_-2], (float)out[entry->base.out_size_-1]);
+    printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float_t)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-2]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
 #endif
 
 #ifdef USING_GEM5
     tick = (clock() - tick)/ticks_per_msec;
     printf("It took %ld msec to perform residual.\n\n", tick);
-    printf("It took %ld msec to perform res_HW.\n\n", hardware_compute_time);
 #endif
 }
 

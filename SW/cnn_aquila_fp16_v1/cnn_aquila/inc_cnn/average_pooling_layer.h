@@ -36,7 +36,7 @@ average_pooling_layer * get_average_pooling_layer_entry(struct list_node *ptr)
 void average_pooling_layer_forward_propagation(struct list_node *ptr, unsigned int hart_id, input_struct *input)
 {
 #ifdef USING_GEM5
-    clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC;
+    clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
     tick = clock();
 #endif
 
@@ -62,9 +62,9 @@ void average_pooling_layer_forward_propagation(struct list_node *ptr, unsigned i
     entry->base.a_ptr_ = (my_float_t *)malloc(entry->base.out_size_ * sizeof(my_float_t));
     if (entry->base.a_ptr_ != NULL) { // Check if memory was allocated
         // memset((void*)entry->base.a_ptr_, 0, entry->base.out_size_ * sizeof(my_float_t));
-        for(int i = 0; i < entry->base.out_size_; i++) {
-            write_dram_value_cmd(&entry->base.a_ptr_[i], 0);
-        }
+        // for(int i = 0; i < entry->base.out_size_; i++) {
+        //     write_dram_value_cmd(&entry->base.a_ptr_[i], 0);
+        // }
     }
     else {
         printf("Error: Unable to allocate memory for entry->base.a_ptr_\n");
@@ -102,11 +102,13 @@ void average_pooling_layer_forward_propagation(struct list_node *ptr, unsigned i
     
     uint64_t dim = out_.height_*out_.width_;
     printf("start avg pooling:\n");
+
+    int source = 1; // 0: sw, 1: hw
+    if(!source)
     for (uint64_t o = start; o < end; o++)
     {
         uint32_t tmp_3, tmp_4;
         tmp_3 = o;
-        // printf("start layer: %d\n", tmp_3);
 
         uint64_t c = o / dim;
         // a[o] = (my_float_t)0;
@@ -132,18 +134,62 @@ void average_pooling_layer_forward_propagation(struct list_node *ptr, unsigned i
         tmp *= entry->scale_factor_;
         write_dram_value_cmd(&a[o], tmp);
     }
-    // wait for other process done
-    // atomic_or(&entry->base.a_done_flag, 1LL << hart_id);
-    // while (entry->base.a_done_flag != entry->base.mask);
+
+    if(source) {
+        my_float_t *dst = a;
+        my_float_t *src = in;
+        int max_len = 112;
+        my_float_t *pimg = dst;
+        my_float_t *pin  = src;
+        for(int i = 0; i < entry->base.out_size_; i++) {
+            write_dram_value_cmd(&a[i], read_dram_value_cmd(&in[i]));
+            
+        }
+        // for(int i = 0; i < entry->base.out_size_; i+=max_len) {
+        //     send_bn_mul_data(1, 0);
+        //     send_bn_add_data(0, 0);
+            
+        //     int remain_len = min(max_len, entry->base.out_size_ - i);
+        //     /*
+        //     * send data
+        //     */
+        //     reset_sram_offset_cmd();
+        //     set_length_cmd(remain_len);
+        //     set_dram_read_input_cmd();
+        //     uint32_t tmp_s;
+        //     memcpy(&tmp_s, &pin, sizeof(tmp_s));
+        //     set_addr_cmd(tmp_s);
+        //     trigger_dram_read_cmd();
+        //     wait_idle_cmd();
+        //     /*
+        //     * start BatchNorm
+        //     */
+        //     set_mode_cmd(1, remain_len);
+        //     reset_relu_cmd();
+        //     trigger_add_cmd();
+        //     wait_idle_cmd();
+        //     set_mode_cmd(0, 0);
+
+        //     /*
+        //     * write data
+        //     */
+        //     set_dram_write_lens_cmd(remain_len);
+        //     set_num_lans_cmd(0);
+        //     set_output_recv_cnt_cmd(0);
+        //     memcpy(&tmp_s, &pimg, sizeof(tmp_s));
+        //     set_dram_write_addr_cmd(0, tmp_s);
+        //     set_dram_w_tr_cmd();
+        //     wait_idle_cmd();
+
+        //     pin += remain_len;
+        //     pimg += remain_len; 
+        //     __asm__ volatile ("nop");
+        // }
+    }
     
     // for (uint64_t o = start; o < end; o++)
     //     out[o] = entry->base.activate(a, o, entry->base.out_size_);
     
-    // wait for other process done
-    // atomic_or(&entry->base.done_flag, 1LL << hart_id);
-    // while (entry->base.done_flag != entry->base.mask);
-
-    // free(entry->base.padded_ptr);
     free(in);
 
     // printf("output:\n");

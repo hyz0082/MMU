@@ -50,6 +50,7 @@ module TPU
     output  logic   [DATA_WIDTH-1 : 0] ret_data_out,
 
     output  logic   [DATA_WIDTH-1 : 0] ret_max_pooling,
+    output  logic   [DATA_WIDTH-1 : 0] ret_avg_pooling,
     output  logic   [DATA_WIDTH-1 : 0] ret_softmax_result,
     
     // output  logic   [DATA_WIDTH*4-1 : 0] rdata_2_out,
@@ -107,7 +108,8 @@ localparam  TRIGGER_SOFTMAX = 21; // whole
 localparam  SET_MODE = 22; // param_1: mode
                            // param_2: len
 localparam  TRIGGER_ADD = 23; 
-localparam  SET_RELU = 24; 
+localparam  SET_RELU = 24;
+localparam  SET_AVERAGE_POOLING = 25;
 
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
@@ -128,6 +130,10 @@ typedef enum {IDLE_S, HW_RESET_S,
               FMA_WAIT_IDLE_S,
               START_POOLING_S,
               WAIT_POOLING_S,
+              AVG_POOLING_ACC_S,
+              WAIT_AVG_POOLING_ACC_S,
+              AVG_POOLING_DIV_S,
+              WAIT_AVG_POOLING_DIV_S,
               WAIT_BN_S,
               STORE_BN_S,
               BN_INC_S,
@@ -291,7 +297,7 @@ logic                         fma_out_valid   [0 : 3];
 
 
 /*
- * MAX POOLING SIGNAL (NEW)
+ * MAX / AVERAGE POOLING SIGNAL (NEW)
  * 9 COMPARATER FOR MAX POOLING
  * 1 ACCUMULATOR FOR AVERAGE POOLING
  */
@@ -299,11 +305,20 @@ logic   [DATA_WIDTH-1   : 0] pooling_data_r [0 : 51];
 logic   [ADDR_BITS-1    : 0] pooling_index;
 logic   [DATA_WIDTH-1   : 0] pooling_result;
 logic pooling_type; // 0: max pooling, 1: average pooling
+logic   [DATA_WIDTH-1   : 0] acc_data_in , div_data_in;
+logic   [DATA_WIDTH-1   : 0] acc_data_out, div_data_out;
+logic                        acc_data_in_valid, div_data_valid;
+logic                        acc_data_out_valid;
+logic                        acc_data_in_last, acc_data_out_last;
+logic   [DATA_WIDTH-1   : 0] avg_pooling_data;
+
+logic   [ADDR_BITS-1    : 0] acc_recv_cnt;
 
 /*
  * MAX POOLING SIGNAL (OLD)
  */
 logic enable_max_pooling;
+logic enable_avg_pooling;
 logic   [DATA_WIDTH-1 : 0] max_pooling_data [0 : 19];
 logic                      max_pooling_data_valid [0 : 20];
 logic   [7 : 0] cmp_result [0 : 20];
@@ -369,6 +384,20 @@ always_ff @( posedge clk_i ) begin
         enable_max_pooling <= 1;
     end
 end
+
+// avg pooling
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        enable_avg_pooling <= 0;
+    end
+    else if(tpu_cmd_valid && tpu_cmd == RESET) begin
+        enable_avg_pooling <= 0;
+    end
+    else if(tpu_cmd_valid && tpu_cmd == SET_AVERAGE_POOLING) begin
+        enable_avg_pooling <= 1;
+    end
+end
+
 
 // error
 always_ff @(posedge clk_i) begin
@@ -442,10 +471,12 @@ always_comb begin
                 next_state = FMA_WAIT_IDLE_S;
              else
                 next_state = FMA_3_S;
-    FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len && !enable_max_pooling)
+    FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len && !enable_max_pooling && !enable_avg_pooling)
                         next_state = IDLE_S;
                      else if(recv_cnt + 4 >= calc_len && enable_max_pooling)
                         next_state = START_POOLING_S;
+                     else if(recv_cnt + 4 >= calc_len && enable_avg_pooling)
+                        next_state = AVG_POOLING_ACC_S;
                      else
                         next_state = FMA_WAIT_IDLE_S;
     START_POOLING_S: next_state = WAIT_POOLING_S;
@@ -453,6 +484,17 @@ always_comb begin
                         next_state = IDLE_S;
                      else 
                         next_state = WAIT_POOLING_S;
+    AVG_POOLING_ACC_S: if(pooling_index == 48)
+                            next_state = WAIT_AVG_POOLING_ACC_S;
+                       else 
+                            next_state = AVG_POOLING_ACC_S;
+    WAIT_AVG_POOLING_ACC_S: if(acc_recv_cnt == 49)
+                                next_state = AVG_POOLING_DIV_S;
+                            else
+                                next_state = WAIT_AVG_POOLING_ACC_S;
+    AVG_POOLING_DIV_S: next_state = WAIT_AVG_POOLING_DIV_S;
+    WAIT_AVG_POOLING_DIV_S: if(div_data_valid) next_state = IDLE_S;
+                            else next_state = WAIT_AVG_POOLING_DIV_S;
     WAIT_SF_ACC_S: if(exp_acc_valid) next_state = IDLE_S;
                    else next_state = WAIT_SF_ACC_S;
     WAIT_SF_S: if(softmax_result_valid) next_state = IDLE_S;
@@ -1457,4 +1499,64 @@ end
 endgenerate
 
 
+/*
+ * avg pooling 
+ */
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        pooling_index <= 0;
+    end
+    else if(curr_state == IDLE_S) begin
+        pooling_index <= 0;
+    end
+    else if(curr_state == AVG_POOLING_ACC_S) begin
+        pooling_index <= pooling_index + 1;
+    end
+end
+
+assign ret_avg_pooling = pooling_result;
+
+/*
+ * acc ip 
+ */
+assign acc_data_in = pooling_data_r[pooling_index];
+assign acc_data_in_valid = (curr_state == AVG_POOLING_ACC_S);
+assign acc_data_in_last = (pooling_index == 48);
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i)                     acc_recv_cnt <= 0;
+    else if(curr_state == IDLE_S) acc_recv_cnt <= 0;
+    else if(acc_data_out_valid)   acc_recv_cnt <= acc_recv_cnt + 1;
+end
+
+always_ff @( posedge clk_i ) begin
+    if(acc_data_out_valid)  pooling_result <= acc_data_out;
+    else if(div_data_valid) pooling_result <= div_data_out;
+end
+
+floating_point_acc ACC2(
+
+    .aclk(clk_i),
+
+    .s_axis_a_tdata(acc_data_in),
+    .s_axis_a_tlast(acc_data_in_last),
+    .s_axis_a_tvalid(acc_data_in_valid),
+
+    .m_axis_result_tdata(acc_data_out),
+    .m_axis_result_tlast(acc_data_out_last),
+    .m_axis_result_tvalid(acc_data_out_valid)
+);
+/*
+ * div ip
+ */
+
+floating_point_div div2(
+        .aclk(clk_i),
+        .s_axis_a_tdata(pooling_result),
+        .s_axis_a_tvalid((curr_state == AVG_POOLING_DIV_S)),
+        .s_axis_b_tdata(16'h5220), // 49
+        .s_axis_b_tvalid(1),
+        .m_axis_result_tdata(div_data_out),
+        .m_axis_result_tvalid(div_data_valid)
+    );
 endmodule

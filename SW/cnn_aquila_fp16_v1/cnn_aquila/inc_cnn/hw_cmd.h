@@ -30,6 +30,7 @@
                            // param_2: len
 #define    TRIGGER_ADD  23 
 #define    SET_RELU     24
+#define    SET_AVERAGE_POOLING 25
 
 volatile unsigned int * TPU_CMD      = (unsigned int *)0xC4000000;
 volatile unsigned int * PARAM_1_ADDR = (unsigned int *)0xC4000004;
@@ -60,6 +61,7 @@ volatile unsigned int * OUTPUT_RECV_CNT_ADDR = (unsigned int *)0xC4002058;
 
 volatile my_float_t * SW_DATA_ADDR = (my_float_t*)0xC400205C;
 volatile unsigned int * SW_WRITE_DRAM_MODE_ADDR = (unsigned int *)0xC4002060;
+volatile my_float_t * RET_AVG_POOLING_ADDR = (my_float_t*)0xC4002064;
 
 volatile my_float_t * TPU_DATA_ADDR[16] = {(my_float_t*)0xC4001000, 
                                         (my_float_t*)0xC4001100, 
@@ -281,8 +283,17 @@ my_float_t read_max_pooling_cmd() {
     return ret;
 }
 
+my_float_t read_avg_pooling_cmd() {
+    return *RET_AVG_POOLING_ADDR;
+}
+
 void set_max_pooling_cmd() {
     *TPU_CMD = SET_MAX_POOLING;
+    __asm__ volatile ("nop");
+}
+
+void set_avg_pooling_cmd() {
+    *TPU_CMD = SET_AVERAGE_POOLING;
     __asm__ volatile ("nop");
 }
 

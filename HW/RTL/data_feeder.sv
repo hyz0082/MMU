@@ -60,6 +60,7 @@ localparam TR_DRAM_W         = 32'hC4002054;
 localparam OUTPUT_RECV_CNT_ADDR = 32'hC4002058;
 localparam SW_DATA_ADDR =  32'hC400205C;
 localparam SW_WRITE_DRAM_MODE_ADDR = 32'hC4002060;
+localparam RET_AVG_POOLING_ADDR    = 32'hC4002064;
 
 
 localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
@@ -107,6 +108,7 @@ assign S_DEVICE_data_i_t = S_DEVICE_data_i;
 (* mark_debug="true" *) logic                      ret_valid;
 (* mark_debug="true" *) logic   [DATA_WIDTH-1 : 0] ret_data_out;
 logic   [DATA_WIDTH-1 : 0] ret_max_pooling;
+logic   [DATA_WIDTH-1 : 0] ret_avg_pooling;
 logic   [DATA_WIDTH-1 : 0] ret_softmax_result;
 // 0xC400000A
 (* mark_debug="true" *) logic                      tpu_busy;     // 0->idle, 1->busy
@@ -241,6 +243,9 @@ always_ff @( posedge clk_i ) begin
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_MAX_POOLING_ADDR) begin
         S_DEVICE_data_o  <= ret_max_pooling;
     end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_AVG_POOLING_ADDR) begin
+        S_DEVICE_data_o  <= ret_avg_pooling;
+    end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_SOFTMAX_ADDR) begin
         S_DEVICE_data_o  <= ret_softmax_result;
     end
@@ -345,6 +350,7 @@ t1 (
     .ret_valid(ret_valid),
     .ret_data_out(ret_data_out),
     .ret_max_pooling(ret_max_pooling),
+    .ret_avg_pooling(ret_avg_pooling),
     .ret_softmax_result(ret_softmax_result),
     .tpu_busy(tpu_busy)     
 );

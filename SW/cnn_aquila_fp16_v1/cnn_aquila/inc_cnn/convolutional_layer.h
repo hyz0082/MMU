@@ -604,8 +604,9 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_dram_write_addr_cmd(s%4, tmp_s);
 
                     set_dram_w_tr_cmd();
-                    // wait_idle_cmd();
-                    wait_idle_quick_cmd();
+                    wait_idle_cmd();
+                    wait_idle_cmd();
+                    // wait_idle_quick_cmd();
                 }
             }
             output_offset += input_num;
