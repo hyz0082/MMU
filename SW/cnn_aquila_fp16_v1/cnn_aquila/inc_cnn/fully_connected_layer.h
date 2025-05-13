@@ -126,26 +126,29 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         // send weight_num weight
         int remain_len = min(weight_num, end - i);
         int send_weight_cnt = 0;
-        for(int oc = 0; oc < remain_len; oc++) {
-            for (uint64_t c = 0; c < entry->base.in_size_; c++) {
-                // send_weight_cmd(W[(i+oc)*entry->base.in_size_ + c], send_weight_cnt++);
-                send_weight_cmd(read_dram_value_cmd(&W[(i+oc)*entry->base.in_size_ + c]), send_weight_cnt++);
-            }
-        }
+        /*
+         * SW send weight
+         */
+        // for(int oc = 0; oc < remain_len; oc++) {
+        //     for (uint64_t c = 0; c < entry->base.in_size_; c++) {
+        //         // send_weight_cmd(W[(i+oc)*entry->base.in_size_ + c], send_weight_cnt++);
+        //         send_weight_cmd(read_dram_value_cmd(&W[(i+oc)*entry->base.in_size_ + c]), send_weight_cnt++);
+        //     }
+        // }
         /*
          * HW SEND WRIGHT
          */
-        // set_dram_read_weight_cmd();
-        // reset_sram_offset_cmd();
-        // set_length_cmd(entry->base.in_size_);
-        // for(int oc = 0; oc < remain_len; oc++) {
-        //     const my_float_t * ppw = &W[(i+oc)*entry->base.in_size_];
-        //     uint32_t tmp_s;
-        //     memcpy(&tmp_s, &ppw, sizeof(tmp_s));
-        //     set_addr_cmd(tmp_s);
-        //     trigger_dram_read_cmd();
-        //     wait_idle_cmd();
-        // }
+        set_dram_read_weight_cmd();
+        reset_sram_offset_cmd();
+        set_length_cmd(entry->base.in_size_);
+        for(int oc = 0; oc < remain_len; oc++) {
+            const my_float_t * ppw = &W[(i+oc)*entry->base.in_size_];
+            uint32_t tmp_s;
+            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            set_addr_cmd(tmp_s);
+            trigger_dram_read_cmd();
+            wait_idle_cmd();
+        }
 
         __asm__ volatile ("nop");
         __asm__ volatile ("nop");
@@ -155,23 +158,30 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         for(int m = 0; m < remain_len; m++) {
             static int fc_num = 0;
             // a[i+m] = read_data_cmd(var[m%4], m/4);
-            write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
+            // write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
             printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
+            if (entry->has_bias_) {
+                    my_float_t tmp_a = read_data_cmd(var[m%4], m/4) + read_dram_value_cmd(&b[i+m]);
+                    write_dram_value_cmd(&a[i+m], tmp_a);
+            }
+            else {
+                write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
+            }
         }
         
 
-        if (entry->has_bias_) {
-            for(int m = 0; m < remain_len; m++) {
-                // a[i+m] += b[i+m];
-                my_float_t tmp_a = read_dram_value_cmd(&a[i+m]) + read_dram_value_cmd(&b[i+m]);
-                write_dram_value_cmd(&a[i+m], tmp_a);
-            }
-        } 
+        // if (entry->has_bias_) {
+        //     for(int m = 0; m < remain_len; m++) {
+        //         // a[i+m] += b[i+m];
+        //         my_float_t tmp_a = read_dram_value_cmd(&a[i+m]) + read_dram_value_cmd(&b[i+m]);
+        //         write_dram_value_cmd(&a[i+m], tmp_a);
+        //     }
+        // } 
     }
 
 #ifdef USING_GEM5
     // tick = (clock() - tick)/ticks_per_msec;
-    printf("It took %ld msec to perform fc without softmax.\n\n", (clock() - tick)/ticks_per_msec);
+    // printf("It took %ld msec to perform fc without softmax.\n\n", (clock() - tick)/ticks_per_msec);
 #endif
     // commit
     // for (uint64_t i = start; i < end; i++) {

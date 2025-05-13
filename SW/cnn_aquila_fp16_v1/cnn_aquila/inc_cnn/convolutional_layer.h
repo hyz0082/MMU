@@ -478,8 +478,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             memcpy(&tmp_s, &ppw, sizeof(tmp_s));
             set_addr_cmd(tmp_s);
             trigger_dram_read_cmd();
-            // wait_idle_cmd();
-            wait_idle_quick_cmd();
+            wait_idle_cmd();
+            // wait_idle_quick_cmd();
         }
         
         
@@ -519,8 +519,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 memcpy(&tmp_s, &pi, sizeof(tmp_s));
                 set_addr_cmd(tmp_s);
                 trigger_dram_read_cmd();
-                // wait_idle_cmd();
-                wait_idle_quick_cmd();
+                wait_idle_cmd();
+                // wait_idle_quick_cmd();
             }
 
 #ifdef USING_GEM5
@@ -605,7 +605,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
                     set_dram_w_tr_cmd();
                     wait_idle_cmd();
-                    wait_idle_cmd();
+                    // wait_idle_cmd();
                     // wait_idle_quick_cmd();
                 }
             }

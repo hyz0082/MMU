@@ -111,6 +111,7 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
 //     clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC;
 //     tick = clock();
 // #endif
+    tick = clock();
 
     entry->base.a_ptr_ = out0;
     entry->base.out_ptr_ = entry->base.a_ptr_;
@@ -162,8 +163,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         memcpy(&tmp_s, &pi, sizeof(tmp_s));
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
-        // wait_idle_cmd();
-        wait_idle_quick_cmd();
+        wait_idle_cmd();
+        // wait_idle_quick_cmd();
 
         /*
          * send out1
@@ -174,8 +175,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         memcpy(&tmp_s, &pj, sizeof(tmp_s));
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
-        // wait_idle_cmd();
-        wait_idle_quick_cmd();
+        wait_idle_cmd();
+        // wait_idle_quick_cmd();
 
         /*
          * calc add
@@ -183,8 +184,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         set_mode_cmd(2, remain_len);
         set_relu_cmd();
         trigger_add_cmd();
-        // wait_idle_cmd();
-        wait_idle_quick_cmd();
+        wait_idle_cmd();
+        // wait_idle_quick_cmd();
         set_mode_cmd(0, 0);
         /*
          * write data
@@ -195,8 +196,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         memcpy(&tmp_s, &pi, sizeof(tmp_s));
         set_dram_write_addr_cmd(0, tmp_s);
         set_dram_w_tr_cmd();
-        // wait_idle_cmd();
-        wait_idle_quick_cmd();
+        wait_idle_cmd();
+        // wait_idle_quick_cmd();
 
         pi += remain_len;
         pj += remain_len;
@@ -230,8 +231,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
             memcpy(&tmp_s, &pi, sizeof(tmp_s));
             set_addr_cmd(tmp_s);
             trigger_dram_read_cmd();
-            // wait_idle_cmd();
-            wait_idle_quick_cmd();
+            wait_idle_cmd();
+            // wait_idle_quick_cmd();
 
             /*
             * send out1
@@ -242,8 +243,8 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
             memcpy(&tmp_s, &pj, sizeof(tmp_s));
             set_addr_cmd(tmp_s);
             trigger_dram_read_cmd();
-            // wait_idle_cmd();
-            wait_idle_quick_cmd();
+            wait_idle_cmd();
+            // wait_idle_quick_cmd();
 
             /*
             * calc add
@@ -251,14 +252,15 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
             set_mode_cmd(2, remain_len);
             set_relu_cmd();
             trigger_add_cmd();
-            wait_idle_quick_cmd();
+            // wait_idle_quick_cmd();
+            wait_idle_cmd();
             set_mode_cmd(0, 0);
             /*
             * write data
             */
             write_dram_value_cmd(pout, read_avg_pooling_cmd());
-            // wait_idle_cmd();
-            wait_idle_quick_cmd();
+            wait_idle_cmd();
+            // wait_idle_quick_cmd();
 
             pi += remain_len;
             pj += remain_len;

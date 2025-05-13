@@ -298,6 +298,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             set_addr_cmd(tmp_s);
             trigger_dram_read_cmd();
             wait_idle_cmd();
+            // wait_idle_quick_cmd();
             /*
              * start BatchNorm
              */
@@ -313,6 +314,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             
             trigger_add_cmd();
             wait_idle_cmd();
+            // wait_idle_quick_cmd();
             set_mode_cmd(0, 0);
 
             /*
@@ -332,6 +334,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             set_dram_write_addr_cmd(0, tmp_s);
             set_dram_w_tr_cmd();
             wait_idle_cmd();
+            // wait_idle_quick_cmd();
 
             pi += remain_len;
             // int ppa = 0, ppb = 0;
@@ -352,7 +355,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             // trigger_bn_cmd();
             // wait_idle_cmd();
 #ifdef USING_GEM5
-            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+            // hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
             // printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
 #endif
             // int var[16] = {0, 4, 8 , 12,
