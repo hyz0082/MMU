@@ -1264,62 +1264,179 @@ end
 //#########################
 //#      LINE BUFFER      #
 //#########################
-generate
-for (genvar i = 0; i < 4; i++) begin
-    global_buffer #(
-    .ADDR_BITS(ADDR_BITS), // ADDR_BITS
-    .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-    )
-    gbuff (
-        .clk_i   (clk_i),
-        .rst_i   (rst_i),
-        .wr_en   ((mode) ? 0             : gbuff_wr_en[i]),
-        .index   ((mode) ? sram_r_idx[i] : gbuff_index[i]),
-        .data_in (gbuff_data_in[i]),
-        .data_out(gbuff_data_out[i])
-    );
-end
-endgenerate
+/*
+ * single port ram
+ */
+// generate
+// for (genvar i = 0; i < 4; i++) begin
+//     global_buffer #(
+//     .ADDR_BITS(ADDR_BITS), // ADDR_BITS
+//     .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+//     )
+//     gbuff (
+//         .clk_i   (clk_i),
+//         .rst_i   (rst_i),
+//         .wr_en   ((mode) ? 0             : gbuff_wr_en[i]),
+//         .index   ((mode) ? sram_r_idx[i] : gbuff_index[i]),
+//         .data_in (gbuff_data_in[i]),
+//         .data_out(gbuff_data_out[i])
+//     );
+// end
+// endgenerate
+/*
+ * dua; port sram
+ */
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+gbuff_1 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   ((mode) ? 0             : gbuff_wr_en[0]),
+    .index_1   ((mode) ? sram_r_idx[0] : gbuff_index[0]),
+    .data_in_1 (gbuff_data_in[0]),
+    .data_out_1(gbuff_data_out[0]),
+
+    .index_2((mode) ? sram_r_idx[1] : gbuff_index[1]),
+    .data_in_2(gbuff_data_in[1]),
+    .data_out_2(gbuff_data_out[1])
+);
+
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+gbuff_2 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   ((mode) ? 0             : gbuff_wr_en[2]),
+    .index_1   ((mode) ? sram_r_idx[2] : gbuff_index[2]),
+    .data_in_1 (gbuff_data_in[2]),
+    .data_out_1(gbuff_data_out[2]),
+
+    .index_2((mode) ? sram_r_idx[3] : gbuff_index[3]),
+    .data_in_2(gbuff_data_in[3]),
+    .data_out_2(gbuff_data_out[3])
+);
 
 //#########################
 //#     WEIGHT BUFFER     #
 //#########################
-generate
-for (genvar i = 0; i < 4; i++) begin
-    global_buffer #(
-    .ADDR_BITS(ADDR_BITS),
-    .DATA_BITS(DATA_WIDTH)
-    )
-    weight (
-        .clk_i   (clk_i),
-        .rst_i   (rst_i),
-        .wr_en   ((mode) ? 0             : weight_wr_en[i]),
-        .index   ((mode) ? sram_r_idx[i] : weight_index[i]),
-        .data_in (weight_in[i]),
-        .data_out(weight_out[i])
-    );
-end
-endgenerate
+/*
+ * single port sram
+ */
+// generate
+// for (genvar i = 0; i < 4; i++) begin
+//     global_buffer #(
+//     .ADDR_BITS(ADDR_BITS),
+//     .DATA_BITS(DATA_WIDTH)
+//     )
+//     weight (
+//         .clk_i   (clk_i),
+//         .rst_i   (rst_i),
+//         .wr_en   ((mode) ? 0             : weight_wr_en[i]),
+//         .index   ((mode) ? sram_r_idx[i] : weight_index[i]),
+//         .data_in (weight_in[i]),
+//         .data_out(weight_out[i])
+//     );
+// end
+// endgenerate
+/*
+ * dual port sram
+ */
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+weight_1 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   ((mode) ? 0             : weight_wr_en[0]),
+    .index_1   ((mode) ? sram_r_idx[0] : weight_index[0]),
+    .data_in_1 (weight_in[0]),
+    .data_out_1(weight_out[0]),
+
+    .index_2((mode) ? sram_r_idx[1] : weight_index[1]),
+    .data_in_2(weight_in[1]),
+    .data_out_2(weight_out[1])
+);
+
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+weight_2 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   ((mode) ? 0             : weight_wr_en[2]),
+    .index_1   ((mode) ? sram_r_idx[2] : weight_index[2]),
+    .data_in_1 (weight_in[2]),
+    .data_out_1(weight_out[2]),
+
+    .index_2((mode) ? sram_r_idx[3] : weight_index[3]),
+    .data_in_2(weight_in[3]),
+    .data_out_2(weight_out[3])
+);
 
 //#########################
 //#       I BUFFER        #
 //#########################
-generate
-for (genvar i = 0; i < 4; i++) begin
-    global_buffer #(
-    .ADDR_BITS(ADDR_BITS),
-    .DATA_BITS(DATA_WIDTH)
-    )
-    I_gbuff (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .wr_en(I_wr_en[i]),
-        .index(I_index[i]),
-        .data_in(I_in[i]),
-        .data_out(I_out[i])
-    );
-end
-endgenerate
+/*
+ * single port sram
+*/
+// generate
+// for (genvar i = 0; i < 4; i++) begin
+//     global_buffer #(
+//     .ADDR_BITS(ADDR_BITS),
+//     .DATA_BITS(DATA_WIDTH)
+//     )
+//     I_gbuff (
+//         .clk_i(clk_i),
+//         .rst_i(rst_i),
+//         .wr_en(I_wr_en[i]),
+//         .index(I_index[i]),
+//         .data_in(I_in[i]),
+//         .data_out(I_out[i])
+//     );
+// end
+// endgenerate
+/*
+ * dual port sram
+ */
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+index_1 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   (I_wr_en[0]),
+    .index_1   (I_index[0]),
+    .data_in_1 (I_in[0]),
+    .data_out_1(I_out[0]),
+
+    .index_2(I_index[1]),
+    .data_in_2(I_in[1]),
+    .data_out_2(I_out[1])
+);
+
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+index_2 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   (I_wr_en[2]),
+    .index_1   (I_index[2]),
+    .data_in_1 (I_in[2]),
+    .data_out_1(I_out[2]),
+
+    .index_2(I_index[3]),
+    .data_in_2(I_in[3]),
+    .data_out_2(I_out[3])
+);
 
 //#########################
 //#   PARTIAL SUM BUFFER  #

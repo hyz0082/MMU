@@ -81,13 +81,19 @@ static uint64_t conv_out_dim(uint64_t in_width, uint64_t in_height, uint64_t win
 
 void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, input_struct *input)
 {
-#ifdef USING_GEM5
-    clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
-    clock_t  send_data_time = 0, hardware_compute_time = 0;
-    tick = clock();
-#endif
+// #ifdef USING_GEM5
+//     clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
+//     clock_t  send_data_time = 0, hardware_compute_time = 0;
+//     tick = clock();
+// #endif
     if (entry->pad_type_ == same)
     {
+        send_bn_mul_data(1, 0);
+        send_bn_add_data(0, 0);
+        // set_length_cmd(remain_len);
+        set_dram_read_input_cmd();
+        reset_relu_cmd();
+        set_num_lans_cmd(0);
         index3d in_ = entry->in_;
         index3d in_padded_ = entry->in_padded_;
         index3d padding_ = entry->padding_;
@@ -98,7 +104,10 @@ void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, i
         uint64_t blocksize = compute_block_size(total_size);
         uint64_t start = (blocksize) * hart_id;
         uint64_t end = min((blocksize) * (hart_id+1), total_size);
-    
+        
+        // my_float_t *pimg = &dst[get_index(&in_padded_, padding_.width_, padding_.height_ + 0, 0)];
+        //     // const 
+        // my_float_t *pin = &in[get_index(&in_, 0, 0, 0)];
         for (uint64_t i = start; i < end; i++)
         {
             uint64_t c = i / in_.height_;
@@ -113,8 +122,8 @@ void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, i
             //     my_float_t tmp = read_dram_value_cmd(&pin[x]);
             //     write_dram_value_cmd(&pimg[x], tmp);
             // }
-            send_bn_mul_data(1, 0);
-            send_bn_add_data(0, 0);
+            // send_bn_mul_data(1, 0);
+            // send_bn_add_data(0, 0);
             int max_len = 100;
             for (uint64_t j = 0; j < in_.width_; j += max_len) {
                 int remain_len = min(max_len, in_.width_ - j);
@@ -123,7 +132,7 @@ void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, i
                 */
                 reset_sram_offset_cmd();
                 set_length_cmd(remain_len);
-                set_dram_read_input_cmd();
+                // set_dram_read_input_cmd();
                 uint32_t tmp_s;
                 memcpy(&tmp_s, &pin, sizeof(tmp_s));
                 set_addr_cmd(tmp_s);
@@ -133,7 +142,7 @@ void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, i
                 * start BatchNorm
                 */
                 set_mode_cmd(1, remain_len);
-                reset_relu_cmd();
+                // reset_relu_cmd();
                 trigger_add_cmd();
                 wait_idle_cmd();
                 set_mode_cmd(0, 0);
@@ -142,7 +151,7 @@ void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, i
                 * write data
                 */
                 set_dram_write_lens_cmd(remain_len);
-                set_num_lans_cmd(0);
+                // set_num_lans_cmd(0);
                 set_output_recv_cnt_cmd(0);
                 memcpy(&tmp_s, &pimg, sizeof(tmp_s));
                 set_dram_write_addr_cmd(0, tmp_s);
@@ -151,13 +160,8 @@ void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, i
 
                 pin += remain_len;
                 pimg += remain_len; 
-                __asm__ volatile ("nop");
-            
-    #ifdef USING_GEM5
-                clock_t  tmp_tick = clock();
-                hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
-    #endif
             }
+            
         }
     }
 }
@@ -230,8 +234,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 {
 
 #ifdef USING_GEM5
-    clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
+    clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000/1000;
     clock_t  send_data_time = 0, hardware_compute_time = 0;
+    clock_t  send_weight_time = 0, send_idx_time = 0;
+    clock_t  padding_time = 0, store_data_time = 0;
+    clock_t  tmp_tick = clock();
     tick = clock();
 #endif
 
@@ -279,15 +286,25 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
     // conv_copy_and_pad_input_sw(entry, hart_id, input);
     // conv_copy_and_pad_input_sw(entry, hart_id, input);
-
-    conv_copy_and_pad_input(entry, hart_id, input);
-
-    if(entry->delete_input) {
-        free(input->in_ptr_);
+    tmp_tick = clock();
+    if(entry->weight_.width_ != 1) {
+        conv_copy_and_pad_input(entry, hart_id, input);
     }
-    // free(entry->base.padded_ptr);
+    padding_time += (clock() - tmp_tick)/ticks_per_msec;
 
-    my_float_t *in = entry->base.padded_ptr;
+    my_float_t *in_ptr_prev = input->in_ptr_;
+    // if(entry->delete_input) {
+    //     free(input->in_ptr_);
+    // }
+    // free(entry->base.padded_ptr);
+    my_float_t *in;
+    if(entry->weight_.width_ != 1) {
+        // my_float_t *in = entry->base.padded_ptr;
+        in = entry->base.padded_ptr;
+    }
+    else {
+        in = input->in_ptr_;
+    }
     my_float_t *a = entry->base.a_ptr_;
 
     my_float_t *W = weights + entry->base.weight_offset;//entry->base._W;
@@ -347,7 +364,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     input_num = out_.width_ * ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
     out_w_per_op_hw = out_.width_;
     out_h_per_op_hw = ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
-
+    printf("original shape: %d, %d\n", (int)input_num, (int)weight_num);
     while(input_num * weight_num > 1024 || (input_num * in_.depth_ * weight_.height_ * weight_.width_) >= idx_gbuff_size) {
         h_per_op_hw--;
         weight_num--;
@@ -378,7 +395,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
     int size_per_channel_hw = h_per_op_hw * in_padded_.width_;
     printf("val: %d %d\n", h_per_op_hw, in_padded_.width_);
-    printf("float: %d, _Float16: %d\n", sizeof(float_t), sizeof(my_float_t));
+    // printf("float: %d, _Float16: %d\n", sizeof(float_t), sizeof(my_float_t));
 
     /*
      * debug setting
@@ -394,11 +411,14 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         printf("error shape\n");
         exit(1);
     }
-
+    printf("input  shape: (%d, %d, %d)\n", (int)in_.width_, (int)in_.height_, (int)in_.depth_);
+    printf("weight shape: (%d, %d, %d)\n", (int)weight_.width_, (int)weight_.height_, (int)in_.depth_);
+    printf("input  sram usage: %d\n", (int)size_per_channel_hw * (int)in_.depth_);
+    printf("weight sram usage: %d\n", (int)weight_.height_ * (int)weight_.width_ * (int)in_.depth_ * (int)weight_num);
     printf("each HW conv shape: %d %d %d\n", input_num, weight_num, kernel_len);
+    printf("result sram %d\n", (int)input_num*(int)weight_num);
 
     set_KMN_cmd(kernel_len, input_num, weight_num);
-    printf("input_num: %d\n", input_num);
     set_conv_cmd(kernel_len);
     set_idx_cmd(0, kernel_len, kernel_len*2, kernel_len*3);
     reset_preload_cmd();
@@ -406,6 +426,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     /*
      * idx ram setting
      */
+    tmp_tick = clock();
     int index_offset = 0;
 
     for(uint64_t y = 0; y < out_h_per_op_hw; y++) {
@@ -429,6 +450,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             }
         }
     }
+    send_idx_time += (clock() - tmp_tick)/ticks_per_msec;
     /*
      * end
      */
@@ -467,6 +489,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
          * READ (weight_.height_ * weight_.width_ * in_.depth_) 
          * PER OP
          */
+        tmp_tick = clock();
         set_dram_read_weight_cmd();
         reset_sram_offset_cmd();
         set_length_cmd(weight_.height_ * weight_.width_ * in_.depth_);
@@ -481,7 +504,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             wait_idle_cmd();
             // wait_idle_quick_cmd();
         }
-        
+        send_weight_time += (clock() - tmp_tick)/ticks_per_msec;
         
         int output_offset = 0;
         
@@ -507,6 +530,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             /*
              * HW SEND INPUT
              */
+            tmp_tick = clock();
             uint64_t curr_h = h * h_stride_;
             reset_sram_offset_cmd();
             set_length_cmd(size_per_channel_hw);
@@ -522,20 +546,23 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 wait_idle_cmd();
                 // wait_idle_quick_cmd();
             }
+            send_data_time += (clock() - tmp_tick)/ticks_per_msec;
 
 #ifdef USING_GEM5
-            clock_t  tmp_tick = clock();
+            // clock_t  tmp_tick = clock();
             __asm__ volatile ("nop");
             __asm__ volatile ("nop");
             __asm__ volatile ("nop");
             __asm__ volatile ("nop");
 #endif
+            tmp_tick = clock();
             trigger_conv_cmd();
             // wait_idle_cmd();
             wait_idle_quick_cmd();
+            hardware_compute_time += (clock() - tmp_tick)/ticks_per_msec;
 
 #ifdef USING_GEM5
-            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+            // hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
             // printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
 #endif
             
@@ -570,6 +597,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             /*
              * HW WRITE RESULT
              */
+            tmp_tick = clock();
             if(write_source)
             {
                 // set_dram_write_lens_cmd(remain_num);
@@ -609,6 +637,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     // wait_idle_quick_cmd();
                 }
             }
+            store_data_time += (clock() - tmp_tick)/ticks_per_msec;
             output_offset += input_num;
         }
         // printf("value: %f %f\n", (float)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]));
@@ -675,6 +704,9 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     // }
     // printf("before free\n");
     // printf("value: %f %f\n", (float)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
+    if(entry->delete_input) {
+        free(in_ptr_prev);
+    }
     free(entry->base.padded_ptr);
     // printf("after free\n");
     // printf("value: %f %f\n", (float)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
@@ -691,8 +723,12 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 #ifdef USING_GEM5
     tick = (clock() - tick)/ticks_per_msec;
     printf("It took %ld msec to perform conv.\n\n", tick);
-    printf("It took %ld msec to perform on HW.\n\n", hardware_compute_time);
-    // 
+    printf("It took %ld msec to perform on hardware_compute_time.\n", hardware_compute_time);
+    printf("It took %ld msec to perform on send_data_time.\n", send_data_time);
+    printf("It took %ld msec to perform on send_weight_time.\n", send_weight_time);
+    printf("It took %ld msec to perform on send_idx_time.\n", send_idx_time);
+    printf("It took %ld msec to perform on padding_time.\n", padding_time);
+    printf("It took %ld msec to perform on store_data_time.\n\n", store_data_time);
 #endif
     // exit(1);
 }

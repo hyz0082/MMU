@@ -73,6 +73,11 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
     clock_t  tick, ticks_per_msec = CLOCKS_PER_SEC/1000;
     clock_t hardware_compute_time = 0;
     tick = clock();
+    clock_t ticks_estimate = CLOCKS_PER_SEC/1000/1000;
+    clock_t start_clock = clock();
+    clock_t send_data_time = 0;
+    clock_t hw_compute_time = 0;
+    clock_t store_data_time = 0;
 #endif
 
     batchnorm_layer *entry = get_batchnorm_layer_entry(ptr);
@@ -175,12 +180,12 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             pimg += remain_len; 
             __asm__ volatile ("nop");
             
-#ifdef USING_GEM5
-            clock_t  tmp_tick = clock();
-            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
-            tmp_tick = clock();
-            hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/100);
-#endif
+// #ifdef USING_GEM5
+//             clock_t  tmp_tick = clock();
+//             hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/1000);
+//             tmp_tick = clock();
+//             hardware_compute_time += (clock() - tmp_tick)/(ticks_per_msec/100);
+// #endif
         }
         set_max_pooling_cmd();
         for (uint64_t ch = 0; ch < in_.depth_; ch++){
@@ -290,6 +295,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             /*
              * send data
              */
+            start_clock = clock();
             reset_sram_offset_cmd();
             set_length_cmd(remain_len);
             set_dram_read_input_cmd();
@@ -298,10 +304,12 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             set_addr_cmd(tmp_s);
             trigger_dram_read_cmd();
             wait_idle_cmd();
+            send_data_time += (clock() - start_clock)/ticks_estimate;
             // wait_idle_quick_cmd();
             /*
              * start BatchNorm
              */
+            start_clock = clock();
             my_float_t actv_type[2] = {-1, -1};
             set_mode_cmd(1, remain_len);
             // check activation function is identity or relu
@@ -316,7 +324,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             wait_idle_cmd();
             // wait_idle_quick_cmd();
             set_mode_cmd(0, 0);
-
+            hw_compute_time += (clock() - start_clock)/ticks_estimate;
             /*
              * test read
              */
@@ -327,6 +335,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
              * write data
              */
             // error max len once is 100
+            start_clock = clock();
             set_dram_write_lens_cmd(remain_len);
             set_num_lans_cmd(0);
             set_output_recv_cnt_cmd(0);
@@ -334,6 +343,7 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
             set_dram_write_addr_cmd(0, tmp_s);
             set_dram_w_tr_cmd();
             wait_idle_cmd();
+            store_data_time += (clock() - start_clock)/ticks_estimate;
             // wait_idle_quick_cmd();
 
             pi += remain_len;
@@ -439,7 +449,10 @@ void batchnorm_layer_forward_propagation(struct list_node *ptr, unsigned int har
 #ifdef USING_GEM5
     tick = (clock() - tick)/ticks_per_msec;
     printf("It took %ld msec to perform batchNorm.\n\n", tick);
-    printf("It took %ld msec to perform BN_HW.\n\n", hardware_compute_time);
+    // printf("It took %ld msec to perform BN_HW.\n\n", hardware_compute_time);
+    printf("It took %ld msec to perform on bn_send_data_time.\n", send_data_time);
+    printf("It took %ld msec to perform on bn_hw_compute_time.\n", hw_compute_time);
+    printf("It took %ld msec to perform on bn_store_data_time.\n\n", store_data_time);
 #endif
 
 }
