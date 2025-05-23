@@ -110,6 +110,14 @@ localparam  SET_MODE = 22; // param_1: mode
 localparam  TRIGGER_ADD = 23; 
 localparam  SET_RELU = 24;
 localparam  SET_AVERAGE_POOLING = 25;
+localparam  SET_BN_MUL_SRAM_0 = 26;
+localparam  SET_BN_MUL_SRAM_1 = 27;
+localparam  SET_BN_MUL_SRAM_2 = 28;
+localparam  SET_BN_MUL_SRAM_3 = 29;
+localparam  SET_BN_ADD_SRAM_0 = 30;
+localparam  SET_BN_ADD_SRAM_1 = 31;
+localparam  SET_BN_ADD_SRAM_2 = 32;
+localparam  SET_BN_ADD_SRAM_3 = 33;
 
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
@@ -119,6 +127,8 @@ typedef enum {IDLE_S, HW_RESET_S,
               TRIGGER_S, TRIGGER_LAST_S,
               FORWARD_S,
               WAIT_IDLE_S,
+              START_BATCHNORM_S,
+              WAIT_BATCHNORM_S,
               STORE_S, 
               NEXT_ROW_S,
               NEXT_COL_S,
@@ -260,12 +270,48 @@ logic [8:0] sa_in_cnt, sa_forward_cnt;
  * mode: 2 -> skip add
  */
 logic   [DATA_WIDTH*4-1 : 0]   tpu_data [0 : 3];
-(* mark_debug="true" *)    logic [1 : 0] mode;
+logic [1 : 0] mode;
 logic   [ADDR_BITS-1  : 0]   bn_len;
 logic   [ADDR_BITS-1  : 0]   bn_cnt;
 logic   [DATA_WIDTH*4-1 : 0] bn_data_out [0 : 3];
 logic bn_valid;
 logic bn_valid_reg;
+
+/*
+ * BatchNorm and add signal (follow by GeMM)
+ * 4x4 FMA (same as GeMM)
+ * 4 sram for mul value
+ * 4 sram for add value
+ */
+(* mark_debug="true" *)    logic   [DATA_WIDTH-1   : 0]  bn_fma_a_data    [0 : 15];
+(* mark_debug="true" *)    logic                         bn_fma_a_valid   [0 : 15];
+logic   [DATA_WIDTH-1   : 0]  bn_fma_b_data    [0 : 15];
+logic                         bn_fma_b_valid   [0 : 15];
+logic   [DATA_WIDTH-1   : 0]  bn_fma_c_data    [0 : 15];
+logic                         bn_fma_c_valid   [0 : 15];
+logic   [DATA_WIDTH-1   : 0]  bn_fma_out       [0 : 15];
+logic   [DATA_WIDTH-1   : 0]  bn_fma_out_relu  [0 : 15];
+logic                         bn_fma_out_valid [0 : 15];
+
+logic                         bn_fma_out_valid_r [0 : 15];
+logic   [DATA_WIDTH*4-1 : 0]  bn_fma_out_r      [0 : 3];
+
+/*
+ * BatchNorm mul & add sram signal
+ */
+(* mark_debug="true" *)logic [3 : 0]       bn_mul_wren;
+(* mark_debug="true" *)logic [3 : 0]       bn_add_wren;
+logic                         bn_source         [0 : 3];
+logic   [ADDR_BITS-1  : 0]    bn_sram_idx       [0 : 3];
+logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_in    [0 : 3];
+logic   [DATA_WIDTH-1 : 0]    bn_add_sram_in    [0 : 3];
+logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_out   [0 : 3];
+logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_out_r [0 : 3];
+logic   [DATA_WIDTH-1 : 0]    bn_add_sram_out   [0 : 3];
+logic   [DATA_WIDTH-1 : 0]    bn_add_sram_out_r [0 : 3];
+
+logic   [DATA_WIDTH-1 : 0]    bn_mul_val_r [0 : 3];
+logic   [DATA_WIDTH-1 : 0]    bn_add_val_r [0 : 3];
 
 /*
  * BatchNorm and add signal 
@@ -280,20 +326,20 @@ logic                         fma_c_valid [0 : 3];
 logic   [DATA_WIDTH-1   : 0]  fma_out        [0 : 3];
 logic   [DATA_WIDTH-1   : 0]  fma_out_relu   [0 : 3];
 logic                         fma_out_valid   [0 : 3];
-(* mark_debug="true" *)    logic                         fma_out_valid_r [0 : 3];
-(* mark_debug="true" *)    logic   [DATA_WIDTH*4-1 : 0]  fma_out_r;
-(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  sram_r_idx [0 : 3];
-(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  sram_w_idx;
+logic                         fma_out_valid_r [0 : 3];
+logic   [DATA_WIDTH*4-1 : 0]  fma_out_r;
+logic   [ADDR_BITS-1    : 0]  sram_r_idx [0 : 3];
+logic   [ADDR_BITS-1    : 0]  sram_w_idx;
 
 // logic   [ADDR_BITS-1    : 0]  calc_num;
 (* mark_debug="true" *)    logic                         relu_en;
 
-(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  send_cnt;
-(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  recv_cnt;
-(* mark_debug="true" *)    logic   [ADDR_BITS-1    : 0]  calc_len;
+logic   [ADDR_BITS-1    : 0]  send_cnt;
+logic   [ADDR_BITS-1    : 0]  recv_cnt;
+logic   [ADDR_BITS-1    : 0]  calc_len;
 
-(* mark_debug="true" *)    logic   [DATA_WIDTH-1 : 0] mul_val_r;
-(* mark_debug="true" *)    logic   [DATA_WIDTH-1 : 0] add_val_r;
+logic   [DATA_WIDTH-1 : 0] mul_val_r;
+logic   [DATA_WIDTH-1 : 0] add_val_r;
 
 
 /*
@@ -450,7 +496,10 @@ always_comb begin
     FORWARD_S: if(sa_forward_cnt == 6)  next_state = WAIT_IDLE_S;
                else                     next_state = FORWARD_S;
     WAIT_IDLE_S: if   (mmu_busy) next_state = WAIT_IDLE_S;
-                 else            next_state = STORE_S;
+                 else            next_state = START_BATCHNORM_S;
+    START_BATCHNORM_S: next_state = WAIT_BATCHNORM_S;
+    WAIT_BATCHNORM_S : if(bn_fma_out_valid[0]) next_state = STORE_S;
+                       else next_state = WAIT_BATCHNORM_S;
     STORE_S: if(conv_end)           next_state = IDLE_S;
              else if(conv_next_row) next_state = NEXT_ROW_S;
              else                   next_state = NEXT_COL_S;
@@ -970,7 +1019,8 @@ always_ff @(posedge clk_i) begin
         P_data_in[i] <= (P_status[i] == SW_READ   ) ? 0
                       : (P_status[i] == SW_WRITE  ) ? tpu_data[i] 
                       : (P_status[i] == TPU_READ  ) ? 0 
-                      : (P_status[i] == TPU_WRITE && mode == 0 ) ? rdata_out[i]
+                    //   : (P_status[i] == TPU_WRITE && mode == 0 ) ? rdata_out[i]
+                      : (P_status[i] == TPU_WRITE && mode == 0 ) ? bn_fma_out_r[i]
                       : (P_status[i] == TPU_WRITE && mode == 1 ) ? bn_data_out[i]
                       : (P_status[i] == DRAM_READ ) ? 0  
                       : (P_status[i] == DRAM_WRITE) ? 0  
@@ -1444,7 +1494,7 @@ index_2 (
 generate
 for (genvar i = 0; i < 4; i++) begin
     global_buffer #(
-    .ADDR_BITS(8),
+    .ADDR_BITS(10),
     .DATA_BITS(DATA_WIDTH*4)
     )
     P_gbuff (
@@ -1549,14 +1599,15 @@ generate
     end
 endgenerate
 
+// should be nonblocking
 generate
     always_comb begin
         for (int i = 0; i < 4; i++) begin
             if(fma_out[i][15]) begin
-                fma_out_relu[i] <= 0;
+                fma_out_relu[i] = 0;
             end
             else begin
-                fma_out_relu[i] <= fma_out[i];
+                fma_out_relu[i] = fma_out[i];
             end
         end
     end
@@ -1666,7 +1717,6 @@ floating_point_acc ACC2(
 /*
  * div ip
  */
-
 floating_point_div div2(
         .aclk(clk_i),
         .s_axis_a_tdata(pooling_result),
@@ -1676,4 +1726,212 @@ floating_point_div div2(
         .m_axis_result_tdata(div_data_out),
         .m_axis_result_tvalid(div_data_valid)
     );
+
+/*
+ * BATCHNORM HARDWARE
+ * FOLLOW BY GeMM
+ */
+// a
+always_comb begin
+    bn_fma_a_data[ 0] = bn_mul_sram_out_r[0];
+    bn_fma_a_data[ 4] = bn_mul_sram_out_r[0];
+    bn_fma_a_data[ 8] = bn_mul_sram_out_r[0];
+    bn_fma_a_data[12] = bn_mul_sram_out_r[0];
+
+    bn_fma_a_data[ 1] = bn_mul_sram_out_r[1];
+    bn_fma_a_data[ 5] = bn_mul_sram_out_r[1];
+    bn_fma_a_data[ 9] = bn_mul_sram_out_r[1];
+    bn_fma_a_data[13] = bn_mul_sram_out_r[1];
+
+    bn_fma_a_data[ 2] = bn_mul_sram_out_r[2];
+    bn_fma_a_data[ 6] = bn_mul_sram_out_r[2];
+    bn_fma_a_data[10] = bn_mul_sram_out_r[2];
+    bn_fma_a_data[14] = bn_mul_sram_out_r[2];
+
+    bn_fma_a_data[ 3] = bn_mul_sram_out_r[3];
+    bn_fma_a_data[ 7] = bn_mul_sram_out_r[3];
+    bn_fma_a_data[11] = bn_mul_sram_out_r[3];
+    bn_fma_a_data[15] = bn_mul_sram_out_r[3];
+end
+// b
+always_comb begin
+    {bn_fma_b_data[ 0], bn_fma_b_data[ 4], 
+     bn_fma_b_data[ 8], bn_fma_b_data[12]} = rdata_out[0];
+
+    {bn_fma_b_data[ 1], bn_fma_b_data[ 5], 
+     bn_fma_b_data[ 9], bn_fma_b_data[13]} = rdata_out[1];
+
+    {bn_fma_b_data[ 2], bn_fma_b_data[ 6], 
+     bn_fma_b_data[10], bn_fma_b_data[14]} = rdata_out[2];
+
+    {bn_fma_b_data[ 3], bn_fma_b_data[ 7], 
+     bn_fma_b_data[11], bn_fma_b_data[15]} = rdata_out[3];
+end
+// c
+always_comb begin
+   bn_fma_c_data[ 0] = bn_add_sram_out_r[0];
+   bn_fma_c_data[ 4] = bn_add_sram_out_r[0];
+   bn_fma_c_data[ 8] = bn_add_sram_out_r[0];
+   bn_fma_c_data[12] = bn_add_sram_out_r[0];
+
+   bn_fma_c_data[ 1] = bn_add_sram_out_r[1];
+   bn_fma_c_data[ 5] = bn_add_sram_out_r[1];
+   bn_fma_c_data[ 9] = bn_add_sram_out_r[1];
+   bn_fma_c_data[13] = bn_add_sram_out_r[1];
+
+   bn_fma_c_data[ 2] = bn_add_sram_out_r[2];
+   bn_fma_c_data[ 6] = bn_add_sram_out_r[2];
+   bn_fma_c_data[10] = bn_add_sram_out_r[2];
+   bn_fma_c_data[14] = bn_add_sram_out_r[2];
+
+   bn_fma_c_data[ 3] = bn_add_sram_out_r[3];
+   bn_fma_c_data[ 7] = bn_add_sram_out_r[3];
+   bn_fma_c_data[11] = bn_add_sram_out_r[3];
+   bn_fma_c_data[15] = bn_add_sram_out_r[3];
+end
+
+generate
+    always_comb begin 
+        for(int i = 0; i < 16; i++) begin
+            bn_fma_a_valid[i] = (curr_state == START_BATCHNORM_S);
+            bn_fma_b_valid[i] = (curr_state == START_BATCHNORM_S);
+            bn_fma_c_valid[i] = (curr_state == START_BATCHNORM_S);
+        end
+    end
+endgenerate
+
+/*
+ * 4x4 FMA
+ */
+generate
+for (genvar i = 0; i < 16; i++) begin
+    floating_point_0 FP(
+
+        .aclk(clk_i),
+
+        .s_axis_a_tdata(bn_fma_a_data[i]),
+        .s_axis_a_tvalid(bn_fma_a_valid[i]),
+
+        .s_axis_b_tdata(bn_fma_b_data[i]),
+        .s_axis_b_tvalid(bn_fma_b_valid[i]),
+
+        .s_axis_c_tdata(bn_fma_c_data[i]),
+        .s_axis_c_tvalid(bn_fma_c_valid[i]),
+
+        .m_axis_result_tdata(bn_fma_out[i]),
+        .m_axis_result_tvalid(bn_fma_out_valid[i])
+    );
+end
+endgenerate
+
+/*
+ * relu
+ */
+generate
+    always_comb begin
+        for (int i = 0; i < 16; i++) begin
+            if(bn_fma_out[i][15]) begin
+                bn_fma_out_relu[i] = 0;
+            end
+            else begin
+                bn_fma_out_relu[i] = bn_fma_out[i];
+            end
+        end
+    end
+endgenerate
+
+generate
+    always_ff @( posedge clk_i ) begin
+        if(bn_fma_out_valid[0] && !relu_en) begin
+            bn_fma_out_r[0] <= {bn_fma_out[ 0], bn_fma_out[ 4], 
+                                bn_fma_out[ 8], bn_fma_out[12]};
+            bn_fma_out_r[1] <= {bn_fma_out[ 1], bn_fma_out[ 5], 
+                                bn_fma_out[ 9], bn_fma_out[13]};
+            bn_fma_out_r[2] <= {bn_fma_out[ 2], bn_fma_out[ 6], 
+                                bn_fma_out[10], bn_fma_out[14]};
+            bn_fma_out_r[3] <= {bn_fma_out[ 3], bn_fma_out[ 7], 
+                                bn_fma_out[11], bn_fma_out[15]};
+        end
+        else if(bn_fma_out_valid[0] && relu_en) begin
+            bn_fma_out_r[0] <= {bn_fma_out_relu[ 0], bn_fma_out_relu[ 4], 
+                                bn_fma_out_relu[ 8], bn_fma_out_relu[12]};
+            bn_fma_out_r[1] <= {bn_fma_out_relu[ 1], bn_fma_out_relu[ 5], 
+                                bn_fma_out_relu[ 9], bn_fma_out_relu[13]};
+            bn_fma_out_r[2] <= {bn_fma_out_relu[ 2], bn_fma_out_relu[ 6], 
+                                bn_fma_out_relu[10], bn_fma_out_relu[14]};
+            bn_fma_out_r[3] <= {bn_fma_out_relu[ 3], bn_fma_out_relu[ 7], 
+                                bn_fma_out_relu[11], bn_fma_out_relu[15]};
+        end
+    end
+endgenerate
+
+/*
+ * BatchNorm MUL ADD SRAM
+ */
+always_comb begin
+    bn_mul_wren[0] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_0);
+    bn_mul_wren[1] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_1);
+    bn_mul_wren[2] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_2);
+    bn_mul_wren[3] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_3);
+
+    bn_add_wren[0] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_0);
+    bn_add_wren[1] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_1);
+    bn_add_wren[2] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_2);
+    bn_add_wren[3] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_3);
+end
+
+generate
+    always_ff @( posedge clk_i ) begin
+        for(int i = 0; i < 4; i++) begin
+            if(curr_state == IDLE_S) begin
+                bn_sram_idx[i] <= 0;
+            end
+            else if(curr_state == NEXT_COL_S) begin
+                bn_sram_idx[i] <= bn_sram_idx[i] + 1;
+            end
+        end
+    end
+endgenerate
+
+generate
+for (genvar i = 0; i < 4; i++) begin
+    global_buffer #(
+    .ADDR_BITS(8),
+    .DATA_BITS(DATA_WIDTH)
+    )
+    BN_mul_gbuff (
+        .clk_i   (clk_i),
+        .rst_i   (rst_i),
+        .wr_en   (bn_mul_wren[i]),
+        .index   ((bn_mul_wren[i]) ? tpu_param_2_in : bn_sram_idx[i]),
+        .data_in (tpu_param_1_in),
+        .data_out(bn_mul_sram_out[i])
+    );
+end
+endgenerate
+
+generate
+for (genvar i = 0; i < 4; i++) begin
+    global_buffer #(
+    .ADDR_BITS(8),
+    .DATA_BITS(DATA_WIDTH)
+    )
+    BN_add_gbuff (
+        .clk_i   (clk_i),
+        .rst_i   (rst_i),
+        .wr_en   (bn_add_wren[i]),
+        .index   ((bn_add_wren[i]) ? tpu_param_2_in : bn_sram_idx[i]),
+        .data_in (tpu_param_1_in),
+        .data_out(bn_add_sram_out[i])
+    );
+end
+endgenerate
+
+always_ff @( posedge clk_i ) begin
+    for(int i = 0; i < 4; i++) begin
+        bn_mul_sram_out_r[i] <= bn_mul_sram_out[i];
+        bn_add_sram_out_r[i] <= bn_add_sram_out[i];
+    end
+end
+
 endmodule
