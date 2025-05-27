@@ -1467,7 +1467,7 @@ weight_2 (
  * dual port sram
  */
 global_buffer_dp #(
-.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.ADDR_BITS(13), // ADDR_BITS
 .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
 )
 index_1 (
@@ -1484,7 +1484,7 @@ index_1 (
 );
 
 global_buffer_dp #(
-.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.ADDR_BITS(13), // ADDR_BITS
 .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
 )
 index_2 (
