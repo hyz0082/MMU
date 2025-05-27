@@ -119,6 +119,13 @@ localparam  SET_BN_ADD_SRAM_1 = 31;
 localparam  SET_BN_ADD_SRAM_2 = 32;
 localparam  SET_BN_ADD_SRAM_3 = 33;
 
+localparam  SET_I_OFFSET_1    = 34;
+localparam  SET_I_OFFSET_2    = 35;
+localparam  SET_I_OFFSET_3    = 36;
+localparam  SET_I_OFFSET_4    = 37;
+
+localparam  SET_COL_IDX       = 38; 
+
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
               READ_DATA_1_S, READ_DATA_2_S, 
@@ -239,6 +246,10 @@ logic   [ADDR_BITS-1  : 0]   I_index   [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   I_in      [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   I_out     [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   I_out_reg [0 : 3];
+
+logic   [ADDR_BITS-1 : 0]   I_out_offset_index [0 : 3];
+logic   [ADDR_BITS-1 : 0]   I_out_offset_out   [0 : 3];
+logic   [ADDR_BITS-1 : 0]   I_out_offset_out_r [0 : 3];
 
 //#########################
 //#      PARTIAL SUM      #
@@ -676,7 +687,8 @@ always_ff @(posedge clk_i) begin
     end
     else if(curr_state == NEXT_ROW_S) begin
         for(int i = 0; i < 4; i++) begin
-            row_idx[i] <= row_idx[i] + K_cnt * 4;
+            // row_idx[i] <= row_idx[i] + K_cnt * 4;
+            row_idx[i] <= row_idx_start[i];
         end
     end
     else if(curr_state == NEXT_COL_S) begin
@@ -727,7 +739,7 @@ end
 //#   COL INDEX  START    #
 //#########################
 always_ff @(posedge clk_i) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_ROW_IDX)begin
+    if(tpu_cmd_valid && tpu_cmd == SET_COL_IDX)begin
         col_idx_start[tpu_param_1_in] <= tpu_param_2_in;
     end
 end
@@ -803,7 +815,7 @@ always_ff @(posedge clk_i) begin
     for (int i = 0; i < 4; i++) begin
         gbuff_index[i] <= (gbuff_status[i] == SW_READ   ) ? param_2_in_reg
                         : (gbuff_status[i] == SW_WRITE  ) ? param_2_in_reg 
-                        : (gbuff_status[i] == TPU_READ  ) ? I_out_reg[i] 
+                        : (gbuff_status[i] == TPU_READ  ) ? I_out_reg[i] + I_out_offset_out_r[i]
                         : (gbuff_status[i] == TPU_WRITE ) ? 0 
                         : (gbuff_status[i] == DRAM_READ ) ? 0  
                         : (gbuff_status[i] == DRAM_WRITE) ? 0  
@@ -1487,6 +1499,53 @@ index_2 (
     .data_in_2(I_in[3]),
     .data_out_2(I_out[3])
 );
+
+/*
+ * I_OUT_OFFSET BUFFER
+ * I_OUT_OFFSET
+ * I_out_offset_index
+ */
+generate
+for (genvar i = 0; i < 4; i++) begin
+    global_buffer #(
+    .ADDR_BITS(10),
+    .DATA_BITS(DATA_WIDTH)
+    )
+    P_gbuff (
+        .clk_i   (clk_i),
+        .rst_i   (rst_i),
+        .wr_en   ( (tpu_cmd_valid && tpu_cmd == (34 + i)) ),
+        .index   ((tpu_cmd_valid && tpu_cmd == (34 + i)) ? tpu_param_2_in : I_out_offset_index[i]),
+        .data_in (tpu_param_1_in),
+        .data_out(I_out_offset_out[i])
+    );
+end
+endgenerate
+
+always_ff @( posedge clk_i ) begin
+    for(int i = 0; i < 4; i++) begin
+        I_out_offset_out_r[i] <= I_out_offset_out[i];
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    for (int i = 0; i < 4; i++) begin
+        if(rst_i) begin
+            I_out_offset_index[i] <= 0;
+        end
+        else if(curr_state == IDLE_S) begin
+            I_out_offset_index[i] <= 0;
+        end
+        else if(next_state == NEXT_ROW_S) begin
+            I_out_offset_index[i] <= I_out_offset_index[i] + 1;
+        end
+        else if(next_state == NEXT_COL_S) begin
+            I_out_offset_index[i] <= 0;
+        end
+
+    end
+end
+
 
 //#########################
 //#   PARTIAL SUM BUFFER  #
