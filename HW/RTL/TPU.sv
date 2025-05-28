@@ -1466,39 +1466,61 @@ weight_2 (
 /*
  * dual port sram
  */
-global_buffer_dp #(
+// global_buffer_dp #(
+// .ADDR_BITS(13), // ADDR_BITS
+// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+// )
+// index_1 (
+//     .clk_i   (clk_i),
+
+//     .wr_en_1   (I_wr_en[0]),
+//     .index_1   (I_index[0]),
+//     .data_in_1 (I_in[0]),
+//     .data_out_1(I_out[0]),
+
+//     .index_2(I_index[1]),
+//     .data_in_2(I_in[1]),
+//     .data_out_2(I_out[1])
+// );
+
+// global_buffer_dp #(
+// .ADDR_BITS(13), // ADDR_BITS
+// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+// )
+// index_2 (
+//     .clk_i   (clk_i),
+
+//     .wr_en_1   (I_wr_en[2]),
+//     .index_1   (I_index[2]),
+//     .data_in_1 (I_in[2]),
+//     .data_out_1(I_out[2]),
+
+//     .index_2(I_index[3]),
+//     .data_in_2(I_in[3]),
+//     .data_out_2(I_out[3])
+// );
+
+global_buffer #(
 .ADDR_BITS(13), // ADDR_BITS
 .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
 )
 index_1 (
     .clk_i   (clk_i),
 
-    .wr_en_1   (I_wr_en[0]),
-    .index_1   (I_index[0]),
-    .data_in_1 (I_in[0]),
-    .data_out_1(I_out[0]),
+    .wr_en   (I_wr_en[0]),
+    .index   (I_index[0]),
+    .data_in (I_in[0]),
+    .data_out(I_out[0])
 
-    .index_2(I_index[1]),
-    .data_in_2(I_in[1]),
-    .data_out_2(I_out[1])
+    // .index_2(I_index[1]),
+    // .data_in_2(I_in[1]),
+    // .data_out_2(I_out[1])
 );
 
-global_buffer_dp #(
-.ADDR_BITS(13), // ADDR_BITS
-.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-)
-index_2 (
-    .clk_i   (clk_i),
+assign I_out[1] = I_out[0];
+assign I_out[2] = I_out[0];
+assign I_out[3] = I_out[0];
 
-    .wr_en_1   (I_wr_en[2]),
-    .index_1   (I_index[2]),
-    .data_in_1 (I_in[2]),
-    .data_out_1(I_out[2]),
-
-    .index_2(I_index[3]),
-    .data_in_2(I_in[3]),
-    .data_out_2(I_out[3])
-);
 
 /*
  * I_OUT_OFFSET BUFFER
