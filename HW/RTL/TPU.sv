@@ -126,6 +126,12 @@ localparam  SET_I_OFFSET_4    = 37;
 
 localparam  SET_COL_IDX       = 38; 
 
+localparam RESET_LANS     = 39; 
+localparam SET_LANS_IDX   = 40;
+localparam SRAM_NEXT      = 41;
+localparam POOLING_START  = 42;
+localparam RESET_POOLING_IDX = 43;
+
 typedef enum {IDLE_S, HW_RESET_S, 
               LOAD_IDX_S,
               READ_DATA_1_S, READ_DATA_2_S, 
@@ -294,8 +300,8 @@ logic bn_valid_reg;
  * 4 sram for mul value
  * 4 sram for add value
  */
-(* mark_debug="true" *)    logic   [DATA_WIDTH-1   : 0]  bn_fma_a_data    [0 : 15];
-(* mark_debug="true" *)    logic                         bn_fma_a_valid   [0 : 15];
+logic   [DATA_WIDTH-1   : 0]  bn_fma_a_data    [0 : 15];
+logic                         bn_fma_a_valid   [0 : 15];
 logic   [DATA_WIDTH-1   : 0]  bn_fma_b_data    [0 : 15];
 logic                         bn_fma_b_valid   [0 : 15];
 logic   [DATA_WIDTH-1   : 0]  bn_fma_c_data    [0 : 15];
@@ -310,8 +316,8 @@ logic   [DATA_WIDTH*4-1 : 0]  bn_fma_out_r      [0 : 3];
 /*
  * BatchNorm mul & add sram signal
  */
-(* mark_debug="true" *)logic [3 : 0]       bn_mul_wren;
-(* mark_debug="true" *)logic [3 : 0]       bn_add_wren;
+logic [3 : 0]       bn_mul_wren;
+logic [3 : 0]       bn_add_wren;
 logic                         bn_source         [0 : 3];
 logic   [ADDR_BITS-1  : 0]    bn_sram_idx       [0 : 3];
 logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_in    [0 : 3];
@@ -343,7 +349,7 @@ logic   [ADDR_BITS-1    : 0]  sram_r_idx [0 : 3];
 logic   [ADDR_BITS-1    : 0]  sram_w_idx;
 
 // logic   [ADDR_BITS-1    : 0]  calc_num;
-(* mark_debug="true" *)    logic                         relu_en;
+logic                         relu_en;
 
 logic   [ADDR_BITS-1    : 0]  send_cnt;
 logic   [ADDR_BITS-1    : 0]  recv_cnt;
@@ -404,6 +410,15 @@ logic   [DATA_WIDTH-1 : 0]   exp_1_out_reg, exp_2_out_reg;
 // output
 logic   [DATA_WIDTH-1 : 0]   softmax_result;
 logic                        softmax_result_valid;
+
+/*
+ * pooling hardware signal
+ */
+logic                          max_pooling_valid;
+logic   [DATA_WIDTH*4-1 : 0]   max_pooling_out [0 : 3];
+logic                          pooling_busy;
+logic   [ADDR_BITS-1 : 0]      pooling_index_r;
+
 
 assign conv_end      = (row_acc + 4 >= M_reg && col_acc + 4 >= N_reg);
 assign conv_next_row = (row_acc + 4 < M_reg);
@@ -567,7 +582,7 @@ always_comb begin
     endcase
 end
 
-assign tpu_busy = (curr_state != IDLE_S);
+assign tpu_busy = (curr_state != IDLE_S) || pooling_busy;
 
 always_ff @( posedge clk_i ) begin
     if(curr_state == IDLE_S || curr_state == NEXT_ROW_S || curr_state == NEXT_COL_S) begin
@@ -1581,13 +1596,36 @@ for (genvar i = 0; i < 4; i++) begin
     P_gbuff (
         .clk_i   (clk_i),
         .rst_i   (rst_i),
-        .wr_en   ((mode) ? fma_out_valid_r[i] : P_wr_en[i]),
-        .index   ((mode) ? sram_w_idx         : P_index[i]),
-        .data_in ((mode) ? fma_out_r          : P_data_in[i]),
+        .wr_en   ( (mode == 3) ? max_pooling_valid  :
+                   (mode)      ? fma_out_valid_r[i] : P_wr_en[i]),
+
+        .index   ( (mode == 3) ? pooling_index_r : 
+                   (mode)      ? sram_w_idx      : P_index[i]),
+        
+        .data_in ( (mode == 3) ? max_pooling_out[i] : (mode) 
+                               ? fma_out_r          : P_data_in[i]),
+        
         .data_out(P_data_out[i])
     );
 end
 endgenerate
+
+// generate
+// for (genvar i = 0; i < 4; i++) begin
+//     global_buffer #(
+//     .ADDR_BITS(10),
+//     .DATA_BITS(DATA_WIDTH*4)
+//     )
+//     P_gbuff (
+//         .clk_i   (clk_i),
+//         .rst_i   (rst_i),
+//         .wr_en   ((mode) ? fma_out_valid_r[i] : P_wr_en[i]),
+//         .index   ((mode) ? sram_w_idx         : P_index[i]),
+//         .data_in ((mode) ? fma_out_r          : P_data_in[i]),
+//         .data_out(P_data_out[i])
+//     );
+// end
+// endgenerate
 
 /*
  * BatchNorm and skip add ctrl signal
@@ -2014,5 +2052,45 @@ always_ff @( posedge clk_i ) begin
         bn_add_sram_out_r[i] <= bn_add_sram_out[i];
     end
 end
+
+/*
+ * max pooling
+ */
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        pooling_index_r <= 0;
+    end
+    else if(tpu_cmd_valid && tpu_cmd == RESET_POOLING_IDX) begin
+        pooling_index_r <= 0;
+    end
+    else if(max_pooling_valid) begin
+        pooling_index_r <= pooling_index_r + 1;
+    end
+end
+
+POOLING p1
+(
+    .clk_i(clk_i), .rst_i(rst_i),
+
+    .reset_lans(tpu_cmd_valid && tpu_cmd == RESET_LANS),
+    .set_lans_idx(tpu_cmd_valid && tpu_cmd == SET_LANS_IDX),
+    .sram_next(tpu_cmd_valid && tpu_cmd == SRAM_NEXT),
+    .pooling_start(tpu_cmd_valid && tpu_cmd == POOLING_START),
+
+    .bn_valid(curr_state == STORE_S),
+    .bn_out_1(bn_fma_out_r[0]),
+    .bn_out_2(bn_fma_out_r[1]),
+    .bn_out_3(bn_fma_out_r[2]),
+    .bn_out_4(bn_fma_out_r[3]),
+
+    .max_pooling_valid(max_pooling_valid),
+    .max_pooling_out_1(max_pooling_out[0]),
+    .max_pooling_out_2(max_pooling_out[1]),
+    .max_pooling_out_3(max_pooling_out[2]),
+    .max_pooling_out_4(max_pooling_out[3]),
+
+    .busy(pooling_busy)
+);
+
 
 endmodule

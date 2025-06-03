@@ -19,7 +19,7 @@ input [XLEN-1 : 0]              S_DEVICE_data_i,
     output logic [XLEN-1 : 0]         S_DEVICE_data_o,
 
     // to cdc
-(* mark_debug="true" *)     input  logic              fifo_addr_full_i,
+input  logic              fifo_addr_full_i,
                             input  logic       dram_rw_full_i,
                             input  logic       dram_write_data_h_full_i,
                             input  logic       dram_write_data_l_full_i,
