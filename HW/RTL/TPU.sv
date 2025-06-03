@@ -286,7 +286,7 @@ logic [8:0] sa_in_cnt, sa_forward_cnt;
  * mode: 1 -> BatchNorm
  * mode: 2 -> skip add
  */
-logic   [DATA_WIDTH*4-1 : 0]   tpu_data [0 : 3];
+// logic   [DATA_WIDTH*4-1 : 0]   tpu_data [0 : 3];
 logic [1 : 0] mode;
 logic   [ADDR_BITS-1  : 0]   bn_len;
 logic   [ADDR_BITS-1  : 0]   bn_cnt;
@@ -399,7 +399,7 @@ logic                        cmp_in_valid [0 : 20];
 //       SOFTMAX
 //#########################
 // divisor 
-logic   [DATA_WIDTH-1 : 0]   divisor;
+// logic   [DATA_WIDTH-1 : 0]   divisor;
 logic   [DATA_WIDTH-1 : 0]   exp_acc, exp_acc_reg;
 logic                        exp_acc_valid, exp_acc_last;
 logic   [DATA_WIDTH-1 : 0]   exp_1_in, exp_2_in;
@@ -496,11 +496,6 @@ end
 always_comb begin
     case (curr_state)
     IDLE_S: if(tpu_cmd_valid && tpu_cmd == TRIGGER_CONV    ) next_state = LOAD_IDX_S;
-            // else if(tpu_cmd_valid && tpu_cmd == SET_MUL_VAL     ) next_state = SET_MUL_VAL_S;
-            // else if(tpu_cmd_valid && tpu_cmd == SET_ADD_VAL     ) next_state = SET_ADD_VAL_S;
-            // else if(tpu_cmd_valid && tpu_cmd == SET_PE_VAL    ) next_state = SET_PE_VAL_S;
-            // else if(tpu_cmd_valid && tpu_cmd == SET_CONV_MODE   ) next_state = SET_CONV_MODE_S;
-            // else if(tpu_cmd_valid && tpu_cmd == SET_FIX_MAC_MODE) next_state = SET_FIX_MAC_MODE_S;
             else if(tpu_cmd_valid && tpu_cmd == SW_READ_DATA    ) next_state = SW_READ_DATA_S;
             else if(tpu_cmd_valid && tpu_cmd == TRIGGER_BN    ) next_state = BN_S;
             else if(tpu_cmd_valid && tpu_cmd == SET_SOFTMAX    ) next_state = WAIT_SF_ACC_S;
@@ -1031,12 +1026,12 @@ end
 //#########################
 //#      P DATA ST        #
 //#########################
-always_comb begin
-        tpu_data[0] <= tpu_data_1_in;
-        tpu_data[1] <= tpu_data_2_in;
-        tpu_data[2] <= tpu_data_3_in;
-        tpu_data[3] <= tpu_data_4_in;
-end
+// always_comb begin
+//         tpu_data[0] <= tpu_data_1_in;
+//         tpu_data[1] <= tpu_data_2_in;
+//         tpu_data[2] <= tpu_data_3_in;
+//         tpu_data[3] <= tpu_data_4_in;
+// end
 
 //#########################
 //#      P DATA IN        #
@@ -1044,7 +1039,7 @@ end
 always_ff @(posedge clk_i) begin
     for (int i = 0; i < 4; i++) begin
         P_data_in[i] <= (P_status[i] == SW_READ   ) ? 0
-                      : (P_status[i] == SW_WRITE  ) ? tpu_data[i] 
+                      : (P_status[i] == SW_WRITE  ) ? 0 //tpu_data[i] 
                       : (P_status[i] == TPU_READ  ) ? 0 
                     //   : (P_status[i] == TPU_WRITE && mode == 0 ) ? rdata_out[i]
                       : (P_status[i] == TPU_WRITE && mode == 0 ) ? bn_fma_out_r[i]
@@ -1168,9 +1163,9 @@ M1 (
 //       SOFTMAX
 //#########################
 always_ff @( posedge clk_i ) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_DIVISOR) begin
-        divisor <= tpu_data_1_in;
-    end
+    // if(tpu_cmd_valid && tpu_cmd == SET_DIVISOR) begin
+    //     divisor <= tpu_data_1_in;
+    // end
 end
 always_ff @( posedge clk_i ) begin
     exp_1_out_reg       <= exp_1_out;

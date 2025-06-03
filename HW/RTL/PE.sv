@@ -72,11 +72,7 @@ module PE
     output reg [DATA_WIDTH-1 : 0] weight_out,
     output     [DATA_WIDTH-1 : 0] mac_value,
 
-    output reg                    busy,     // 0 for idle, 1 for busy
-
-    input  logic    [DATA_WIDTH-1 : 0] bn_in,
-    output logic    [DATA_WIDTH-1 : 0] bn_out,
-    output logic    bn_valid
+    output reg                    busy      // 0 for idle, 1 for busy
 );
 
 //#########################
@@ -184,10 +180,9 @@ always@(posedge clk_i) begin
     end
 end
 
-// a_data, b_data, c_data;
-assign a_data = (mode == CONV_MODE) ? data_in   : mul_val_reg;
-assign b_data = (mode == CONV_MODE) ? weight_in : bn_in;
-assign c_data = (mode == CONV_MODE) ? 0         : add_val_reg;
+assign a_data = data_in;
+assign b_data = weight_in;
+assign c_data = 0;
 
 assign t_valid = pe_cmd_valid && pe_cmd == TRIGGER      ||
                  pe_cmd_valid && pe_cmd == TRIGGER_LAST ||
@@ -304,17 +299,7 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-//#########################
-//#          BN           #
-//#########################
-// assign bn_valid = r_valid;
 
-always_ff @( posedge clk_i ) begin
-    if(r_valid) begin
-        bn_out <= r_data;
-    end
-    bn_valid <= r_valid;
-end
 
 `ifdef VIVADO_ENV
 //#########################

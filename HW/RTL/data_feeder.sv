@@ -121,7 +121,7 @@ logic   [DATA_WIDTH-1 : 0] ret_softmax_result;
 // 0xC4000010
 logic   [DATA_WIDTH-1 : 0] ret_data_out_reg;
 
-logic   [DATA_WIDTH-1 : 0] tpu_data_reg [0 : 15];
+// logic   [DATA_WIDTH-1 : 0] tpu_data_reg [0 : 15];
 
 logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_in;
 logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in;
@@ -260,16 +260,16 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-always_ff @( posedge clk_i ) begin
-    for(int i = 0; i < 16; i++) begin
-        if(rst_i) begin
-            tpu_data_reg[i] <= 0;
-        end
-        else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == TPU_DATA_ADDR[i]) begin
-            tpu_data_reg[i]  <= S_DEVICE_data_i;
-        end
-    end
-end
+// always_ff @( posedge clk_i ) begin
+//     for(int i = 0; i < 16; i++) begin
+//         if(rst_i) begin
+//             tpu_data_reg[i] <= 0;
+//         end
+//         else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == TPU_DATA_ADDR[i]) begin
+//             tpu_data_reg[i]  <= S_DEVICE_data_i;
+//         end
+//     end
+// end
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
@@ -323,13 +323,12 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-always_comb begin
-    tpu_data_1_in = {tpu_data_reg[0], tpu_data_reg[4], tpu_data_reg[8] , tpu_data_reg[12]};
-    tpu_data_2_in = {tpu_data_reg[1], tpu_data_reg[5], tpu_data_reg[9] , tpu_data_reg[13]};
-    tpu_data_3_in = {tpu_data_reg[2], tpu_data_reg[6], tpu_data_reg[10], tpu_data_reg[14]};
-    tpu_data_4_in = {tpu_data_reg[3], tpu_data_reg[7], tpu_data_reg[11], tpu_data_reg[15]};
-    
-end
+// always_comb begin
+//     tpu_data_1_in = {tpu_data_reg[0], tpu_data_reg[4], tpu_data_reg[8] , tpu_data_reg[12]};
+//     tpu_data_2_in = {tpu_data_reg[1], tpu_data_reg[5], tpu_data_reg[9] , tpu_data_reg[13]};
+//     tpu_data_3_in = {tpu_data_reg[2], tpu_data_reg[6], tpu_data_reg[10], tpu_data_reg[14]};
+//     tpu_data_4_in = {tpu_data_reg[3], tpu_data_reg[7], tpu_data_reg[11], tpu_data_reg[15]};  
+// end
 
 TPU #(
     .ACLEN(ACLEN),

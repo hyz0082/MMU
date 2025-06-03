@@ -112,15 +112,15 @@ assign params[1] = param_2_in;
 assign params[2] = param_3_in;
 assign params[3] = param_4_in;
 
-assign bn_in[0] = bn_data_1_in;
-assign bn_in[1] = bn_data_2_in;
-assign bn_in[2] = bn_data_3_in;
-assign bn_in[3] = bn_data_4_in;
+// assign bn_in[0] = bn_data_1_in;
+// assign bn_in[1] = bn_data_2_in;
+// assign bn_in[2] = bn_data_3_in;
+// assign bn_in[3] = bn_data_4_in;
 
-assign bn_data_1_out = {bn_out[0], bn_out[4], bn_out[8] , bn_out[12]};
-assign bn_data_2_out = {bn_out[1], bn_out[5], bn_out[9] , bn_out[13]};
-assign bn_data_3_out = {bn_out[2], bn_out[6], bn_out[10], bn_out[14]};
-assign bn_data_4_out = {bn_out[3], bn_out[7], bn_out[11], bn_out[15]};
+// assign bn_data_1_out = {bn_out[0], bn_out[4], bn_out[8] , bn_out[12]};
+// assign bn_data_2_out = {bn_out[1], bn_out[5], bn_out[9] , bn_out[13]};
+// assign bn_data_3_out = {bn_out[2], bn_out[6], bn_out[10], bn_out[14]};
+// assign bn_data_4_out = {bn_out[3], bn_out[7], bn_out[11], bn_out[15]};
 
 assign bn_valid = pe_bn_valid[0];
 
@@ -267,10 +267,7 @@ generate
                          .data_out(data_out[0]), 
                          .weight_out(weight_out[0]),
                          .mac_value(mac_value[0]),
-                         .busy(pe_busy[0]),
-                         .bn_in(bn_in[0][(DATA_WIDTH*4-1)-:DATA_WIDTH]),
-                         .bn_out(bn_out[0]),
-                         .bn_valid(pe_bn_valid[0])
+                         .busy(pe_busy[0])
                      );
               end
               else if (i == 1 || i == 2 || i == 3) begin
@@ -291,10 +288,7 @@ generate
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
-                         .busy(pe_busy[i]),
-                         .bn_in(bn_in[i][(DATA_WIDTH*4-1)-:DATA_WIDTH]),
-                         .bn_out(bn_out[i]),
-                         .bn_valid(pe_bn_valid[i])
+                         .busy(pe_busy[i])
                      );
               end
               else if (i == 4 || i == 8 || i == 12) begin
@@ -309,17 +303,13 @@ generate
                          .pe_cmd(mmu_cmd),
                          .param_1_in(param_1_in),
                          .param_2_in(param_2_in),
-                         //[127-(32*(i/4)) : 96-(32*(i/4))]
                          .preload_data_in(params[0][(DATA_WIDTH*4-1)-(DATA_WIDTH*(i/4)) : (DATA_WIDTH*3)-(DATA_WIDTH*(i/4))]),
                          .data_in(data_in[i/4]),
                          .weight_in(weight_out[i-4]),
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
-                         .busy(pe_busy[i]),
-                         .bn_in(bn_in[0][(DATA_WIDTH*4-1)-(DATA_WIDTH*(i/4)) : (DATA_WIDTH*3)-(DATA_WIDTH*(i/4))]),
-                         .bn_out(bn_out[i]),
-                         .bn_valid(pe_bn_valid[i])
+                         .busy(pe_busy[i])
                      );
               end
               else begin
@@ -340,10 +330,7 @@ generate
                          .data_out(data_out[i]), 
                          .weight_out(weight_out[i]),
                          .mac_value(mac_value[i]),
-                         .busy(pe_busy[i]),
-                         .bn_in(bn_in[i%4][(DATA_WIDTH*4-1)-(DATA_WIDTH*(i/4)) : (DATA_WIDTH*3)-(DATA_WIDTH*(i/4))]),
-                         .bn_out(bn_out[i]),
-                         .bn_valid(pe_bn_valid[i])
+                         .busy(pe_busy[i])
                      );
               end
        end
