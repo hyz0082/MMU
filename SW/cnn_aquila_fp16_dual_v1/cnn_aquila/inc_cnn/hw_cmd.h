@@ -88,6 +88,9 @@ volatile my_float_t * RET_AVG_POOLING_ADDR = (my_float_t*)0xC4002064;
 volatile unsigned int * GEMM_CORE_SEL_ADDR = (unsigned int *)0xC4002068;
 volatile unsigned int * BUSY_ADDR_2        = (unsigned int *)0xC400206C;
 
+volatile unsigned int * READ_OFFSET = (unsigned int *)0xC4002070;
+volatile unsigned int * READ_ROUNDS = (unsigned int *)0xC4002074;
+
 volatile my_float_t * TPU_DATA_ADDR[16] = {(my_float_t*)0xC4001000, 
                                         (my_float_t*)0xC4001100, 
                                         (my_float_t*)0xC4001200, 
@@ -167,16 +170,19 @@ void send_bn_add_data(my_float_t data, int pos){
 }
 
 void reset_cmd() {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *TPU_CMD = RESET;
     __asm__ volatile ("nop");
-    // set_gemm_core_sel_cmd(1);
-    *TPU_CMD = RESET;
+
+    // set_gemm_core_sel_cmd(2);
+    
+    // *TPU_CMD = RESET;
+    set_gemm_core_sel_cmd(1);
     __asm__ volatile ("nop");
 }
 
 void set_KMN_cmd(int K, int M, int N) {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *PARAM_1_ADDR = 0; // K
     *PARAM_2_ADDR = K;
     *TPU_CMD = SET_KMN;
@@ -190,18 +196,19 @@ void set_KMN_cmd(int K, int M, int N) {
     *TPU_CMD = SET_KMN;
     __asm__ volatile ("nop");
 
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = 0; // K
+    // *PARAM_2_ADDR = K;
+    // *TPU_CMD = SET_KMN;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 1; // M
+    // *PARAM_2_ADDR = M;
+    // *TPU_CMD = SET_KMN;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 2; // N
+    // *PARAM_2_ADDR = N;
+    // *TPU_CMD = SET_KMN;
     set_gemm_core_sel_cmd(1);
-    *PARAM_1_ADDR = 0; // K
-    *PARAM_2_ADDR = K;
-    *TPU_CMD = SET_KMN;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 1; // M
-    *PARAM_2_ADDR = M;
-    *TPU_CMD = SET_KMN;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 2; // N
-    *PARAM_2_ADDR = N;
-    *TPU_CMD = SET_KMN;
     __asm__ volatile ("nop");
 }
 
@@ -261,14 +268,15 @@ void send_offset_4_cmd(int data, int pos) {
 }
 
 void set_conv_cmd(int len) {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *PARAM_1_ADDR = len;
     *TPU_CMD = SET_CONV_MODE;
     __asm__ volatile ("nop");
 
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = len;
+    // *TPU_CMD = SET_CONV_MODE;
     set_gemm_core_sel_cmd(1);
-    *PARAM_1_ADDR = len;
-    *TPU_CMD = SET_CONV_MODE;
     __asm__ volatile ("nop");
 }
 
@@ -279,7 +287,7 @@ void set_bn_cmd(int len) {
 }
 
 void set_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *PARAM_1_ADDR = 0;
     *PARAM_2_ADDR = offset_0;
     *TPU_CMD = SET_ROW_IDX;
@@ -297,27 +305,28 @@ void set_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
     *TPU_CMD = SET_ROW_IDX;
     __asm__ volatile ("nop");
 
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = 0;
+    // *PARAM_2_ADDR = offset_0;
+    // *TPU_CMD = SET_ROW_IDX;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 1;
+    // *PARAM_2_ADDR = offset_1;
+    // *TPU_CMD = SET_ROW_IDX;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 2;
+    // *PARAM_2_ADDR = offset_2;
+    // *TPU_CMD = SET_ROW_IDX;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 3;
+    // *PARAM_2_ADDR = offset_3;
+    // *TPU_CMD = SET_ROW_IDX;
     set_gemm_core_sel_cmd(1);
-    *PARAM_1_ADDR = 0;
-    *PARAM_2_ADDR = offset_0;
-    *TPU_CMD = SET_ROW_IDX;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 1;
-    *PARAM_2_ADDR = offset_1;
-    *TPU_CMD = SET_ROW_IDX;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 2;
-    *PARAM_2_ADDR = offset_2;
-    *TPU_CMD = SET_ROW_IDX;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 3;
-    *PARAM_2_ADDR = offset_3;
-    *TPU_CMD = SET_ROW_IDX;
     __asm__ volatile ("nop");
 }
 
 void set_col_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *PARAM_1_ADDR = 0;
     *PARAM_2_ADDR = offset_0;
     *TPU_CMD = SET_COL_IDX;
@@ -335,36 +344,38 @@ void set_col_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
     *TPU_CMD = SET_COL_IDX;
     __asm__ volatile ("nop");
 
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = 0;
+    // *PARAM_2_ADDR = offset_0;
+    // *TPU_CMD = SET_COL_IDX;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 1;
+    // *PARAM_2_ADDR = offset_1;
+    // *TPU_CMD = SET_COL_IDX;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 2;
+    // *PARAM_2_ADDR = offset_2;
+    // *TPU_CMD = SET_COL_IDX;
+    // __asm__ volatile ("nop");
+    // *PARAM_1_ADDR = 3;
+    // *PARAM_2_ADDR = offset_3;
+    // *TPU_CMD = SET_COL_IDX;
     set_gemm_core_sel_cmd(1);
-    *PARAM_1_ADDR = 0;
-    *PARAM_2_ADDR = offset_0;
-    *TPU_CMD = SET_COL_IDX;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 1;
-    *PARAM_2_ADDR = offset_1;
-    *TPU_CMD = SET_COL_IDX;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 2;
-    *PARAM_2_ADDR = offset_2;
-    *TPU_CMD = SET_COL_IDX;
-    __asm__ volatile ("nop");
-    *PARAM_1_ADDR = 3;
-    *PARAM_2_ADDR = offset_3;
-    *TPU_CMD = SET_COL_IDX;
     __asm__ volatile ("nop");
 }
 
 void reset_preload_cmd() {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *PARAM_1_ADDR = 0;
     *PARAM_2_ADDR = 0;
     *TPU_CMD = SET_PRELOAD;
     __asm__ volatile ("nop");
 
-    // set_gemm_core_sel_cmd(1);
-    *PARAM_1_ADDR = 0;
-    *PARAM_2_ADDR = 0;
-    *TPU_CMD = SET_PRELOAD;
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = 0;
+    // *PARAM_2_ADDR = 0;
+    // *TPU_CMD = SET_PRELOAD;
+    set_gemm_core_sel_cmd(1);
     __asm__ volatile ("nop");
 }
 
@@ -613,7 +624,7 @@ void write_dram_value_cmd(my_float_t *addr, my_float_t data) {
 
 void reset_dram_value_cmd(my_float_t *addr, int len) {
 
-    set_gemm_core_sel_cmd(0);
+    // set_gemm_core_sel_cmd(1);
 
     *PARAM_1_ADDR_FP = 0;
     *SW_WRITE_DRAM_MODE_ADDR = 1;
@@ -649,30 +660,32 @@ void set_mode_cmd(int mode, int length) {
 }
 
 void set_relu_cmd() {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *PARAM_1_ADDR = 1;
     *TPU_CMD = SET_RELU;
     __asm__ volatile ("nop");
 
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = 1;
+    // *TPU_CMD = SET_RELU;
     set_gemm_core_sel_cmd(1);
-    *PARAM_1_ADDR = 1;
-    *TPU_CMD = SET_RELU;
     __asm__ volatile ("nop");
 
-    set_gemm_core_sel_cmd(0);
+    // set_gemm_core_sel_cmd(1);
 }
 
 void reset_relu_cmd() {
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(3);
     *PARAM_1_ADDR = 0;
     *TPU_CMD = SET_RELU;
     __asm__ volatile ("nop");
 
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = 0;
+    // *TPU_CMD = SET_RELU;
     set_gemm_core_sel_cmd(1);
-    *PARAM_1_ADDR = 0;
-    *TPU_CMD = SET_RELU;
     __asm__ volatile ("nop");
-    set_gemm_core_sel_cmd(0);
+    // set_gemm_core_sel_cmd(1);
 }
 
 void trigger_add_cmd() {
@@ -740,6 +753,7 @@ void set_add_sram_3_cmd(my_float_t data, int index) {
 void reset_lans_cmd() {
     *TPU_CMD = RESET_LANS;
     __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
     while((*BUSY_ADDR));
     __asm__ volatile ("nop");
 }
@@ -764,14 +778,19 @@ void reset_pooling_idx_cmd() {
     __asm__ volatile ("nop");
 }
 
-
-// void set_gemm_core_sel_cmd(int sel) {
-//     *GEMM_CORE_SEL_ADDR = sel;
-//     __asm__ volatile ("nop");
-// }
-
 void wait_idle_2_quick_cmd() {
     while((*BUSY_ADDR_2));
     __asm__ volatile ("nop");
 
+}
+
+
+void set_read_offset_cmd(int val) {
+    *READ_OFFSET = val;
+    __asm__ volatile ("nop");
+}
+
+void set_read_rounds_cmd(int val) {
+    *READ_ROUNDS = val;
+    __asm__ volatile ("nop");
 }

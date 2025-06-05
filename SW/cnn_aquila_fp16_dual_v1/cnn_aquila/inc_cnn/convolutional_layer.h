@@ -81,7 +81,7 @@ static uint64_t conv_out_dim(uint64_t in_width, uint64_t in_height, uint64_t win
 
 void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, input_struct *input)
 {   
-    // set_gemm_core_sel_cmd(0);
+    // // set_gemm_core_sel_cmd(1);
 
     if (entry->pad_type_ == same)
     {
@@ -245,6 +245,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     convolutional_layer *entry = get_convolutional_layer_entry(ptr);
 
     static int conv_cnt = 0;
+    set_gemm_core_sel_cmd(1);
     
     if (input->in_size_ != entry->base.in_size_)
     {
@@ -254,7 +255,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
     // malloc input space
     entry->base.padded_ptr = (my_float_t *)malloc(entry->base.padding_size * sizeof(my_float_t));
-    if (entry->base.padded_ptr != NULL) { // Check if memory was allocated
+    if (entry->base.padded_ptr != NULL) {
         if(entry->weight_.width_ != 1) {
             reset_dram_value_cmd(entry->base.padded_ptr, entry->base.padding_size);
         }
@@ -266,7 +267,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
     // // malloc output space
     entry->base.a_ptr_ = (my_float_t *)malloc(entry->base.out_size_ * sizeof(my_float_t));
-    if (entry->base.a_ptr_ != NULL) { // Check if memory was allocated
+    if (entry->base.a_ptr_ != NULL) {
     }
     else {
         printf("Error: Unable to allocate memory for entry->base.a_ptr_\n");
@@ -309,8 +310,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     uint64_t start = 0;
     uint64_t end = out_.depth_;
 
-    // uint64_t out_dim = out_.height_*out_.width_;
-    
     uint32_t tmp[10];
 
     my_float_t *batchNorm_W = W + ( (out_.depth_) * (in_.depth_) * (weight_.height_) * (weight_.width_) );
@@ -455,14 +454,13 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
     reset_preload_cmd();
 
-    set_gemm_core_sel_cmd(0);
-
-    // preprocess_time = (clock() - tick)/ticks_per_msec;
+    // set_gemm_core_sel_cmd(1);
 
     /*
      * idx ram setting
      */
     tmp_tick = clock();
+    set_gemm_core_sel_cmd(3);
     int index_offset = 0;
 
     for(uint64_t compute_ch = 0; compute_ch < in_.depth_; compute_ch++) {
@@ -470,14 +468,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         for(uint64_t wy = 0; wy < weight_.height_; wy++) {
             for(uint64_t wx = 0; wx < weight_.width_; wx++) {
                 int index_value = ch_offset + (wy * in_padded_.width_ + wx);
-                set_gemm_core_sel_cmd(0);
-                send_idx_cmd(index_value, index_offset);
-                set_gemm_core_sel_cmd(1);
                 send_idx_cmd(index_value, index_offset++);
             }
         }
     }
-    set_gemm_core_sel_cmd(0);
+    // set_gemm_core_sel_cmd(1);
     // set offset
     int offset_sel = 1;
     int offset_index = 0;
@@ -485,27 +480,15 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         for(uint64_t x = 0; x < out_w_per_op_hw; x++) {
             int input_offset = (y * h_stride_) * in_padded_.width_ + x * w_stride_;
             if(offset_sel == 1) {
-                set_gemm_core_sel_cmd(0);
-                send_offset_1_cmd(input_offset, offset_index);
-                set_gemm_core_sel_cmd(1);
                 send_offset_1_cmd(input_offset, offset_index);
             }
             else if(offset_sel == 2) {
-                set_gemm_core_sel_cmd(0);
-                send_offset_2_cmd(input_offset, offset_index);
-                set_gemm_core_sel_cmd(1);
                 send_offset_2_cmd(input_offset, offset_index);
             }
             else if(offset_sel == 3) {
-                set_gemm_core_sel_cmd(0);
-                send_offset_3_cmd(input_offset, offset_index);
-                set_gemm_core_sel_cmd(1);
                 send_offset_3_cmd(input_offset, offset_index);
             }
             else if(offset_sel == 4) {
-                set_gemm_core_sel_cmd(0);
-                send_offset_4_cmd(input_offset, offset_index);
-                set_gemm_core_sel_cmd(1);
                 send_offset_4_cmd(input_offset, offset_index);
             }
             offset_sel++;
@@ -515,11 +498,12 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             }
         }
     }
+    set_gemm_core_sel_cmd(1);
     send_idx_time += (clock() - tmp_tick)/ticks_per_msec;
     /*
      * end
      */
-    set_gemm_core_sel_cmd(0);
+    // set_gemm_core_sel_cmd(1);
 
     if(conv_cnt == 3  || conv_cnt == 4  || conv_cnt == 7  || 
         conv_cnt == 10 || conv_cnt == 13 || conv_cnt == 14 || 
@@ -549,7 +533,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
          * PER OP
          */
         tmp_tick = clock();
-        set_gemm_core_sel_cmd(0);
+        // set_gemm_core_sel_cmd(1);
         set_dram_read_weight_cmd();
         reset_sram_offset_cmd();
         set_length_cmd(weight_.height_ * weight_.width_ * in_.depth_);
@@ -586,16 +570,16 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         // 3 4 7 10 13 14 17 20 23 26 27 30 33 36 39 42 45 46
         // 49 52
         __asm__ volatile ("nop");
-        set_gemm_core_sel_cmd(0);
+        // set_gemm_core_sel_cmd(1);
         int output_offset = 0;
         /*
          * configuration for read input
          */
-        set_gemm_core_sel_cmd(0);
+        // set_gemm_core_sel_cmd(1);
         set_length_cmd(size_per_channel_hw);
         set_dram_read_input_cmd();
 
-        set_gemm_core_sel_cmd(0);
+        // set_gemm_core_sel_cmd(1);
 
         int num_lans_get = 1;
         int conv_0_offset = 0;
@@ -624,7 +608,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
              * HW SEND INPUT 1
              */
             tmp_tick = clock();
-            set_gemm_core_sel_cmd(0);
+            // set_gemm_core_sel_cmd(1);
             uint64_t curr_h = h * h_stride_;
             reset_sram_offset_cmd();
             for(uint64_t inc = 0; inc < in_.depth_; inc++) {
@@ -649,7 +633,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
              */
             // if(gemm_core_2_en) {
             //     h += out_h_per_op_hw;
-            //     set_gemm_core_sel_cmd(1);
+            //     // set_gemm_core_sel_cmd(2);
             //     uint64_t curr_h = h_2 * h_stride_;
             //     reset_sram_offset_cmd();
             //     for(uint64_t inc = 0; inc < in_.depth_; inc++) {
@@ -669,12 +653,12 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
             num_lans_get++;
             
-            set_gemm_core_sel_cmd(0);
+            // set_gemm_core_sel_cmd(1);
             set_sram_next_cmd();
             set_lans_idx_cmd();
             
             if(num_lans_get == 3) {
-                set_gemm_core_sel_cmd(0);
+                // set_gemm_core_sel_cmd(1);
                 set_mode_cmd(3, 0);
                 reset_pooling_idx_cmd();
                 __asm__ volatile ("nop");
@@ -725,7 +709,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             tmp_tick = clock();
             // if(conv_cnt != 0)
             // {
-            //     set_gemm_core_sel_cmd(0);
+            //     // set_gemm_core_sel_cmd(1);
             //     set_dram_write_lens_cmd(remain_num);
             //     for(int s = 0; s < remain_oc; s++) {
             //         my_float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
@@ -754,7 +738,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             // if(conv_cnt != 0 && gemm_core_2_en)
             // {
             //     wait_idle_2_quick_cmd();
-            //     set_gemm_core_sel_cmd(1);
+            //     // set_gemm_core_sel_cmd(2);
             //     set_dram_write_lens_cmd(remain_num_2);
             //     for(int s = 0; s < remain_oc; s++) {
             //         my_float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
@@ -771,7 +755,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             //         wait_idle_2_quick_cmd();
             //     }
             //     output_offset += input_num;
-            //     set_gemm_core_sel_cmd(0);
+            //     // set_gemm_core_sel_cmd(1);
             // }
             // wait_idle_cmd();
         }
@@ -789,20 +773,34 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
          * PER OP
          */
         tmp_tick = clock();
-        set_gemm_core_sel_cmd(0);
+        set_gemm_core_sel_cmd(3);
         set_dram_read_weight_cmd();
         reset_sram_offset_cmd();
         set_length_cmd(weight_.height_ * weight_.width_ * in_.depth_);
 
-        for(int curr_oc = o; curr_oc < o + remain_oc; curr_oc++) {
-            int offset_w = (weight_.height_ * (in_.depth_ * curr_oc)) * weight_.width_;
-            const my_float_t * ppw = W + offset_w;
-            uint32_t tmp_s;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
-            set_addr_cmd(tmp_s);
-            trigger_dram_read_cmd();
-            wait_idle_quick_cmd();
-        }
+        // for(int curr_oc = o; curr_oc < o + remain_oc; curr_oc++) {
+        //     int offset_w = (weight_.height_ * (in_.depth_ * curr_oc)) * weight_.width_;
+        //     const my_float_t * ppw = W + offset_w;
+        //     uint32_t tmp_s;
+        //     memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        //     set_addr_cmd(tmp_s);
+        //     trigger_dram_read_cmd();
+        //     wait_idle_quick_cmd();
+        // }
+
+        set_read_rounds_cmd(remain_oc);
+        set_read_offset_cmd(weight_.height_ * in_.depth_ * weight_.width_* 2);
+        // for(int curr_oc = o; curr_oc < o + remain_oc; curr_oc++) {
+        int offset_w = (weight_.height_ * (in_.depth_ * o)) * weight_.width_;
+        const my_float_t * ppw = W + offset_w;
+        uint32_t tmp_s;
+        memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        set_addr_cmd(tmp_s);
+        trigger_dram_read_cmd();
+        wait_idle_quick_cmd();
+        wait_idle_2_quick_cmd();
+        // set_read_rounds_cmd(1);
+        // }
         
         // send batchNorm weight
         int batchNormIndex = 0;
@@ -819,60 +817,62 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             batchNormIndex ++;
             __asm__ volatile ("nop");
         }
+        set_gemm_core_sel_cmd(1);
         /*
          * SEND WEIGHT 2
          */
-        set_gemm_core_sel_cmd(1);
-        set_dram_read_weight_cmd();
-        reset_sram_offset_cmd();
-        set_length_cmd(weight_.height_ * weight_.width_ * in_.depth_);
+        // set_gemm_core_sel_cmd(2);
+        // set_dram_read_weight_cmd();
+        // reset_sram_offset_cmd();
+        // set_length_cmd(weight_.height_ * weight_.width_ * in_.depth_);
 
-        for(int curr_oc = o; curr_oc < o + remain_oc; curr_oc++) {
-            int offset_w = (weight_.height_ * (in_.depth_ * curr_oc + 0)) * weight_.width_;
-            const my_float_t *pw = W + offset_w;
-            const my_float_t * ppw = pw;
-            uint32_t tmp_s;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
-            set_addr_cmd(tmp_s);
-            trigger_dram_read_cmd();
-            wait_idle_2_quick_cmd();
-        }
+        // for(int curr_oc = o; curr_oc < o + remain_oc; curr_oc++) {
+        //     int offset_w = (weight_.height_ * (in_.depth_ * curr_oc + 0)) * weight_.width_;
+        //     const my_float_t *pw = W + offset_w;
+        //     const my_float_t * ppw = pw;
+        //     uint32_t tmp_s;
+        //     memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        //     set_addr_cmd(tmp_s);
+        //     trigger_dram_read_cmd();
+        //     wait_idle_2_quick_cmd();
+        // }
         
-        // send batchNorm weight
-        batchNormIndex = 0;
-        for(int curr_oc = o; curr_oc < o + remain_oc; curr_oc += 4) {
-            set_mul_sram_0_cmd(batchNorm_W[curr_oc    ], batchNormIndex);
-            set_mul_sram_1_cmd(batchNorm_W[curr_oc + 1], batchNormIndex);
-            set_mul_sram_2_cmd(batchNorm_W[curr_oc + 2], batchNormIndex);
-            set_mul_sram_3_cmd(batchNorm_W[curr_oc + 3], batchNormIndex);
+        // // send batchNorm weight
+        // batchNormIndex = 0;
+        // for(int curr_oc = o; curr_oc < o + remain_oc; curr_oc += 4) {
+        //     set_mul_sram_0_cmd(batchNorm_W[curr_oc    ], batchNormIndex);
+        //     set_mul_sram_1_cmd(batchNorm_W[curr_oc + 1], batchNormIndex);
+        //     set_mul_sram_2_cmd(batchNorm_W[curr_oc + 2], batchNormIndex);
+        //     set_mul_sram_3_cmd(batchNorm_W[curr_oc + 3], batchNormIndex);
 
-            set_add_sram_0_cmd(batchNorm_W[out_.depth_ + curr_oc    ], batchNormIndex);
-            set_add_sram_1_cmd(batchNorm_W[out_.depth_ + curr_oc + 1], batchNormIndex);
-            set_add_sram_2_cmd(batchNorm_W[out_.depth_ + curr_oc + 2], batchNormIndex);
-            set_add_sram_3_cmd(batchNorm_W[out_.depth_ + curr_oc + 3], batchNormIndex);
-            batchNormIndex ++;
-            __asm__ volatile ("nop");
-        }
+        //     set_add_sram_0_cmd(batchNorm_W[out_.depth_ + curr_oc    ], batchNormIndex);
+        //     set_add_sram_1_cmd(batchNorm_W[out_.depth_ + curr_oc + 1], batchNormIndex);
+        //     set_add_sram_2_cmd(batchNorm_W[out_.depth_ + curr_oc + 2], batchNormIndex);
+        //     set_add_sram_3_cmd(batchNorm_W[out_.depth_ + curr_oc + 3], batchNormIndex);
+        //     batchNormIndex ++;
+        //     __asm__ volatile ("nop");
+        // }
+        set_gemm_core_sel_cmd(1);
         send_weight_time += (clock() - tmp_tick)/ticks_per_msec;
         
         
         // 3 4 7 10 13 14 17 20 23 26 27 30 33 36 39 42 45 46
         // 49 52
         __asm__ volatile ("nop");
-        set_gemm_core_sel_cmd(0);
         int output_offset = 0;
         /*
          * configuration for read input
          */
-        set_gemm_core_sel_cmd(0);
+        set_gemm_core_sel_cmd(3);
         set_length_cmd(size_per_channel_hw);
         set_dram_read_input_cmd();
-
         set_gemm_core_sel_cmd(1);
-        set_length_cmd(size_per_channel_hw);
-        set_dram_read_input_cmd();
 
-        set_gemm_core_sel_cmd(0);
+        // set_gemm_core_sel_cmd(2);
+        // set_length_cmd(size_per_channel_hw);
+        // set_dram_read_input_cmd();
+
+        // set_gemm_core_sel_cmd(1);
 
 
         for(uint64_t h = 0; h < out_.height_; h += out_h_per_op_hw) {
@@ -888,26 +888,36 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 // gemm_core_2_en = 0;
                 h_2 = h + out_h_per_op_hw;
                 remain_num_2 = out_.width_ * min(out_h_per_op_hw, out_.height_ - h_2);
-                
             }
             
             /*
              * HW SEND INPUT 1
              */
             tmp_tick = clock();
-            set_gemm_core_sel_cmd(0);
+            set_gemm_core_sel_cmd(1);
             uint64_t curr_h = h * h_stride_;
             reset_sram_offset_cmd();
-            for(uint64_t inc = 0; inc < in_.depth_; inc++) {
-                int offset_i = (in_padded_.width_ * in_padded_.height_ * inc) +
-                                (in_padded_.width_ * (curr_h));
-                my_float_t *pi = in + offset_i;
-                uint32_t tmp_s;
-                memcpy(&tmp_s, &pi, sizeof(tmp_s));
-                set_addr_cmd(tmp_s);
-                trigger_dram_read_cmd();
-                wait_idle_quick_cmd();
-            }
+            // for(uint64_t inc = 0; inc < in_.depth_; inc++) {
+            //     int offset_i = (in_padded_.width_ * in_padded_.height_ * inc) +
+            //                     (in_padded_.width_ * (curr_h));
+            //     my_float_t *pi = in + offset_i;
+            //     uint32_t tmp_s;
+            //     memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            //     set_addr_cmd(tmp_s);
+            //     trigger_dram_read_cmd();
+            //     wait_idle_quick_cmd();
+            // }
+            set_read_rounds_cmd(in_.depth_);
+            set_read_offset_cmd(in_padded_.width_ * in_padded_.height_*2);
+            int offset_i = (in_padded_.width_ * in_padded_.height_ * 0) +
+                            (in_padded_.width_ * (curr_h));
+            my_float_t *pi = in + offset_i;
+            uint32_t tmp_s;
+            memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            set_addr_cmd(tmp_s);
+            trigger_dram_read_cmd();
+            wait_idle_quick_cmd();
+            set_read_rounds_cmd(1);
             // }
             // printf("send input: %d\n", (clock() - tmp_tick)/ticks_per_msec);
             send_data_time += (clock() - tmp_tick)/ticks_per_msec;
@@ -920,19 +930,30 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
              */
             if(gemm_core_2_en) {
                 h += out_h_per_op_hw;
-                set_gemm_core_sel_cmd(1);
+                set_gemm_core_sel_cmd(2);
                 uint64_t curr_h = h_2 * h_stride_;
                 reset_sram_offset_cmd();
-                for(uint64_t inc = 0; inc < in_.depth_; inc++) {
-                    int offset_i = (in_padded_.width_ * in_padded_.height_ * inc) +
-                                    (in_padded_.width_ * (curr_h));
-                    my_float_t *pi = in + offset_i;
-                    uint32_t tmp_s;
-                    memcpy(&tmp_s, &pi, sizeof(tmp_s));
-                    set_addr_cmd(tmp_s);
-                    trigger_dram_read_cmd();
-                    wait_idle_2_quick_cmd();
-                }
+                // for(uint64_t inc = 0; inc < in_.depth_; inc++) {
+                //     int offset_i = (in_padded_.width_ * in_padded_.height_ * inc) +
+                //                     (in_padded_.width_ * (curr_h));
+                //     my_float_t *pi = in + offset_i;
+                //     uint32_t tmp_s;
+                //     memcpy(&tmp_s, &pi, sizeof(tmp_s));
+                //     set_addr_cmd(tmp_s);
+                //     trigger_dram_read_cmd();
+                //     wait_idle_2_quick_cmd();
+                // }
+                set_read_rounds_cmd(in_.depth_);
+                set_read_offset_cmd(in_padded_.width_ * in_padded_.height_*2);
+                int offset_i = (in_padded_.width_ * in_padded_.height_ * 0) +
+                                (in_padded_.width_ * (curr_h));
+                my_float_t *pi = in + offset_i;
+                uint32_t tmp_s;
+                memcpy(&tmp_s, &pi, sizeof(tmp_s));
+                set_addr_cmd(tmp_s);
+                trigger_dram_read_cmd();
+                wait_idle_quick_cmd();
+                set_read_rounds_cmd(1);
                 trigger_conv_cmd();
             }
 
@@ -942,7 +963,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
              * HW WRITE RESULT 1
              */
             tmp_tick = clock();
-            set_gemm_core_sel_cmd(0);
+            set_gemm_core_sel_cmd(1);
             set_dram_write_lens_cmd(remain_num);
             for(int s = 0; s < remain_oc; s++) {
                 my_float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
@@ -969,7 +990,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             if(gemm_core_2_en)
             {
                 wait_idle_2_quick_cmd();
-                set_gemm_core_sel_cmd(1);
+                set_gemm_core_sel_cmd(2);
                 set_dram_write_lens_cmd(remain_num_2);
                 for(int s = 0; s < remain_oc; s++) {
                     my_float_t *pa = &a[get_index(&out_, 0, 0, o + s)];
@@ -986,7 +1007,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     wait_idle_2_quick_cmd();
                 }
                 output_offset += input_num;
-                set_gemm_core_sel_cmd(0);
+                set_gemm_core_sel_cmd(1);
             }
             wait_idle_cmd();
         }
@@ -1055,7 +1076,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     free(entry->base.padded_ptr);
     conv_cnt++;
     
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(1);
 
 #ifdef PRINT_LAYER
     // printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float_t)out[0], (float_t)out[1], (float_t)out[entry->base.out_size_-2], (float_t)out[entry->base.out_size_-1]);

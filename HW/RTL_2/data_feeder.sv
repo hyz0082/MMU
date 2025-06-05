@@ -71,6 +71,9 @@ localparam RET_AVG_POOLING_ADDR    = 32'hC4002064;
 localparam GEMM_CORE_SEL_ADDR = 32'hC4002068;
 localparam BUSY_ADDR_2        = 32'hC400206C;
 
+localparam READ_OFFSET = 32'hC4002070;
+localparam READ_ROUNDS = 32'hC4002074;
+
 
 localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
                                           32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
@@ -95,7 +98,9 @@ typedef enum {IDLE_S,
               WRITE_DRAM_DATA_S,
               WAIT_GEMM_IDLE_S,
               DUMMY_1_S,
-              WAIT_WRITE_DONE_S
+              WAIT_WRITE_DONE_S,
+              READ_NEXT_ROUND_S,
+              RECV_NEXT_ROUND_S
               } state_t;
 state_t send_req_curr_state;
 state_t send_req_next_state;
@@ -131,8 +136,6 @@ logic   [DATA_WIDTH-1 : 0] ret_softmax_result_2;
 // 0xC4000010
 logic   [DATA_WIDTH-1 : 0] ret_data_out_reg;
 
-// logic   [DATA_WIDTH-1 : 0] tpu_data_reg [0 : 15];
-
 logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_in;
 logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in;
 logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_in;
@@ -155,12 +158,21 @@ logic [63:0] byte_mask_r;
 
 logic [XLEN-1 : 0] got_addr;
 
+/*
+ * MULTIPLE READ SIGNAL
+ */
+logic [XLEN-1 : 0] read_offset;
+logic [15 : 0]     read_rounds;
+
+logic [XLEN-1 : 0] read_addr_base;
+logic [15 : 0]     read_rounds_cnt;
+
+logic [XLEN-1 : 0] recv_addr_base;
+logic [15 : 0]     recv_rounds_cnt;
 
 logic [6 : 0] dram_write_addr_offset;
 
-// (* mark_debug="true" *) logic           dram_read_data_vaild_h_r;
 logic [255 : 0] dram_read_data_h_r;
-// (* mark_debug="true" *) logic           dram_read_data_vaild_l_r;
 logic [255 : 0] dram_read_data_l_r;
 
 logic write_data_type; // 0: input, 1: weight
@@ -211,7 +223,7 @@ logic rw_to_gemm;
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
-        gemm_core_sel <= 0;
+        gemm_core_sel <= 1;
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == GEMM_CORE_SEL_ADDR) begin
         gemm_core_sel <= S_DEVICE_data_i;
@@ -339,13 +351,6 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-// always_comb begin
-//     tpu_data_1_in = {tpu_data_reg[0], tpu_data_reg[4], tpu_data_reg[8] , tpu_data_reg[12]};
-//     tpu_data_2_in = {tpu_data_reg[1], tpu_data_reg[5], tpu_data_reg[9] , tpu_data_reg[13]};
-//     tpu_data_3_in = {tpu_data_reg[2], tpu_data_reg[6], tpu_data_reg[10], tpu_data_reg[14]};
-//     tpu_data_4_in = {tpu_data_reg[3], tpu_data_reg[7], tpu_data_reg[11], tpu_data_reg[15]};  
-// end
-
 TPU #(
     .ACLEN(ACLEN),
     .ADDR_BITS(ADDR_BITS),
@@ -353,7 +358,7 @@ TPU #(
 ) 
 t1 (
     .clk_i(clk_i), .rst_i(rst_i),
-    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel == 0),     // tpu valid
+    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[0]),     // tpu valid
     .tpu_cmd(tpu_cmd),           // tpu
     .tpu_param_1_in(tpu_param_1_in),    // data 1
     .tpu_param_2_in(tpu_param_2_in),     // data 2
@@ -383,7 +388,7 @@ TPU #(
 ) 
 t2 (
     .clk_i(clk_i), .rst_i(rst_i),
-    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel == 1),     // tpu valid
+    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[1]),     // tpu valid
     .tpu_cmd(tpu_cmd),           // tpu
     .tpu_param_1_in(tpu_param_1_in),    // data 1
     .tpu_param_2_in(tpu_param_2_in),     // data 2
@@ -405,6 +410,53 @@ t2 (
     .ret_softmax_result(ret_softmax_result_2),
     .tpu_busy(tpu_busy_2)     
 );
+
+/*
+ * MULTIPLE READ 
+ */
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        read_offset  <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == READ_OFFSET) begin
+        read_offset  <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        read_rounds  <= 1;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == READ_ROUNDS) begin
+        read_rounds  <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        read_rounds_cnt <= 0;
+    end
+    else if(send_req_curr_state == IDLE_S) begin
+        read_rounds_cnt <= 0;
+    end
+    else if(send_req_curr_state == READ_NEXT_ROUND_S) begin
+        read_rounds_cnt <= read_rounds_cnt + 1;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        recv_rounds_cnt <= 0;
+    end
+    else if(write_data_curr_state == IDLE_S) begin
+        recv_rounds_cnt <= 0;
+    end
+    else if(write_data_curr_state == RECV_NEXT_ROUND_S) begin
+        recv_rounds_cnt <= recv_rounds_cnt + 1;
+    end
+end
+
 
 //############################
 //# MEMORY ARBITER INTERFACE #
@@ -433,9 +485,13 @@ always_comb begin
                       else 
                         send_req_next_state = WAIT_FIFO_ADDR_S;
     SEND_REQ_S: if(req_len_cnt + (addr_offset >> 1) >= length) //32
-                    send_req_next_state = IDLE_S;
+                    send_req_next_state = READ_NEXT_ROUND_S;
                 else 
                     send_req_next_state = WAIT_FIFO_ADDR_S;
+    READ_NEXT_ROUND_S:  if(read_rounds_cnt + 1 == read_rounds)
+                            send_req_next_state = IDLE_S;
+                        else
+                            send_req_next_state = WAIT_FIFO_ADDR_S;
     default: send_req_next_state = IDLE_S;
     endcase
 end
@@ -474,13 +530,14 @@ always_ff @( posedge clk_i ) begin
     if(rst_i) begin
         addr <= 0;
         rw_r <= 1;
-        // dram_data <= 0;
         byte_mask_r <= 64'hFFFF_FFFF_FFFF_FFFF;
         // need additional reset
         req_len_cnt <= 0;
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_R_ADDR) begin
         addr <= S_DEVICE_data_i;
+
+        read_addr_base <= S_DEVICE_data_i;
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_R_LENGTH) begin
         length <= S_DEVICE_data_i;
@@ -488,11 +545,15 @@ always_ff @( posedge clk_i ) begin
     else if(send_req_curr_state == SEND_REQ_S) begin
         addr <= addr + addr_offset;
         rw_r <= 1;
-        // dram_data <= 0;
         byte_mask_r <= 64'hFFFF_FFFF_FFFF_FFFF;
         req_len_cnt += addr_offset >> 1;
     end
     else if(send_req_curr_state == IDLE_S) begin
+        req_len_cnt <= 0;
+    end
+    else if(send_req_curr_state == READ_NEXT_ROUND_S) begin
+        addr           <= read_addr_base + read_offset;
+        read_addr_base <= read_addr_base + read_offset;
         req_len_cnt <= 0;
     end
 
@@ -531,10 +592,13 @@ always_comb begin
                         write_data_next_state = READ_NEXT_DATA_S;
                    else write_data_next_state = WRITE_INPUT_S;
     READ_NEXT_DATA_S: if(send_cnt == length)
-                            write_data_next_state = IDLE_S;
+                            write_data_next_state = RECV_NEXT_ROUND_S;
                       else
                             write_data_next_state = WAIT_FIFO_DATA_S;
     DUMMY_1_S: write_data_next_state = IDLE_S;
+    RECV_NEXT_ROUND_S:  if(recv_rounds_cnt + 1 == read_rounds) 
+                            write_data_next_state = IDLE_S;
+                        else write_data_next_state = WAIT_FIFO_DATA_S;
     default: write_data_next_state = IDLE_S;
     endcase
 end
@@ -550,9 +614,15 @@ always_ff @( posedge clk_i ) begin
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_R_ADDR) begin
         got_addr <= S_DEVICE_data_i;
+
+        recv_addr_base <= S_DEVICE_data_i;
     end
     else if(write_data_curr_state == WRITE_INPUT_S) begin
         got_addr <= got_addr + 2;
+    end
+    else if(write_data_curr_state == RECV_NEXT_ROUND_S) begin
+        got_addr       <= recv_addr_base + read_offset;
+        recv_addr_base <= recv_addr_base + read_offset;
     end
 end
 
@@ -582,6 +652,9 @@ always_ff @( posedge clk_i ) begin
         sram_offset <= sram_offset + 1;
     end
     else if(write_data_curr_state == IDLE_S) begin
+        send_cnt <= 0;
+    end
+    else if(write_data_curr_state == RECV_NEXT_ROUND_S) begin
         send_cnt <= 0;
     end
 end
@@ -772,10 +845,10 @@ always_ff @( posedge clk_i ) begin
         for(int j = 0; j < 4; j++) begin
             if(write_dram_curr_state == WAIT_GEMM_DATA_S && (ret_valid || ret_valid_2)) begin
                 // dram_data_r[i][output_recv_cnt*4 + j] <= P_data_out[i][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                if(gemm_core_sel == 0) begin
+                if(gemm_core_sel[0]) begin
                     dram_data_r[dram_addr_offset*4 + j] <= P_data_out[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
                 end
-                else if(gemm_core_sel == 1) begin
+                else if(gemm_core_sel[1]) begin
                     dram_data_r[dram_addr_offset*4 + j] <= P_data_out_2[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
                 end
             end

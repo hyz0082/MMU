@@ -103,7 +103,7 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
 
     reset_preload_cmd();
 
-    set_gemm_core_sel_cmd(0);
+    set_gemm_core_sel_cmd(1);
 
     for(int i = 0; i < kernel_len*4; i++) {
         send_idx_cmd(i, i);
