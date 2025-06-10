@@ -175,7 +175,10 @@ logic [6 : 0] dram_write_addr_offset;
 logic [255 : 0] dram_read_data_h_r;
 logic [255 : 0] dram_read_data_l_r;
 
-logic write_data_type; // 0: input, 1: weight
+logic [2 : 0] write_data_type; // 0: input, 1: weight, 2: batchNorm mul 
+                               // 2: batchNorm add
+logic [11 : 0] batchNormIndex;
+logic [1  : 0] batchNormOffset;
 
 /*
     get 512 bits data per dram read
@@ -220,6 +223,24 @@ logic [DATA_WIDTH-1 : 0] sw_data_r;
 logic [DATA_WIDTH-1 : 0] sw_write_data_r;
 logic sw_write_dram_mode;
 logic rw_to_gemm;
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        batchNormOffset <= 0;
+        batchNormIndex  <= 0;
+    end
+    else if(write_data_curr_state == IDLE_S) begin
+        batchNormOffset <= 0;
+        batchNormIndex  <= 0;
+    end
+    else if(write_data_curr_state == WRITE_INPUT_S) begin
+        batchNormOffset <= batchNormOffset + 1;
+        if(batchNormOffset == 3) begin
+            batchNormIndex <= batchNormIndex + 1;
+        end
+    end
+end
+
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
@@ -339,6 +360,24 @@ always_ff @( posedge clk_i ) begin
         tpu_cmd        <= 10;
         tpu_param_1_in <= data_in[got_addr[5:1]];// data_in
         tpu_param_2_in <= sram_offset;// index
+    end
+    else if(write_data_curr_state == WRITE_INPUT_S && write_data_type == 2) begin
+        tpu_cmd_valid  <= 1;
+        if     (batchNormOffset == 0) tpu_cmd <= 26;
+        else if(batchNormOffset == 1) tpu_cmd <= 27;
+        else if(batchNormOffset == 2) tpu_cmd <= 28;
+        else                          tpu_cmd <= 29;
+        tpu_param_1_in <= data_in[got_addr[5:1]];
+        tpu_param_2_in <= batchNormIndex;
+    end
+    else if(write_data_curr_state == WRITE_INPUT_S && write_data_type == 3) begin
+        tpu_cmd_valid  <= 1;
+        if     (batchNormOffset == 0) tpu_cmd <= 30;
+        else if(batchNormOffset == 1) tpu_cmd <= 31;
+        else if(batchNormOffset == 2) tpu_cmd <= 32;
+        else                          tpu_cmd <= 33;
+        tpu_param_1_in <= data_in[got_addr[5:1]];
+        tpu_param_2_in <= batchNormIndex;
     end
     else if(write_dram_curr_state ==  COLLECT_OUTPUT_S) begin
         tpu_cmd_valid  <= 1;
