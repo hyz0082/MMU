@@ -6,7 +6,6 @@
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // =============================================================================
-// `include "config.vh"
 
 module TPU
 #(parameter ACLEN=8,
@@ -20,27 +19,19 @@ module TPU
     input   logic                        tpu_cmd_valid,     // tpu valid
     input   logic   [ACLEN-1 : 0]        tpu_cmd,           // tpu
     input   logic   [DATA_WIDTH-1 : 0]   tpu_param_1_in,    // data 1
-    input   logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in,     // data 2
+    input   logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in,    // data 2
 
     // partial load
     input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_in,
     input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in,
     input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_in,
     input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_in,
-
+    // output data
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_out,
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_out,
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_out,
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_out,
-    /////////// DRAM input  ///////////////////////////////////////////////
-    // input   logic   [DATA_WIDTH-1 : 0]   data_1_in,
-    // input   logic   [DATA_WIDTH-1 : 0]   data_2_in,
-    // input   logic   [DATA_WIDTH-1 : 0]   data_3_in,
-    // input   logic   [DATA_WIDTH-1 : 0]   data_4_in,
-    // input   logic   [DATA_WIDTH-1 : 0]   weight_1_in,
-    // input   logic   [DATA_WIDTH-1 : 0]   weight_2_in,
-    // input   logic   [DATA_WIDTH-1 : 0]   weight_3_in,
-    // input   logic   [DATA_WIDTH-1 : 0]   weight_4_in,
+
     /////////// TPU outpupt ///////////////////////////////////////////////
     output  logic                      ret_valid,
     output  logic   [DATA_WIDTH-1 : 0] ret_data_out,
@@ -55,80 +46,82 @@ module TPU
 
     output  logic                        tpu_busy     // 0->idle, 1->busy
 );
+`include "tpu_cmd.svh"
 
-//#########################
-//    TPU cmd table
-//#########################
-localparam  RESET             = 0;  // whole
-localparam  TRIGGER_CONV      = 1;  // whole
-localparam  TRIGGER_CONV_LAST = 2;  // whole
-localparam  SET_MUL_VAL       = 3;  // tpu_cmd   : 7
-                                   // param_1_in: column number
-                                   // param_2_in: multipled value
-localparam  SET_ADD_VAL       = 4;  // partial
-                                   // param_1_in: column number
-                                   // param_2_in: added value
-localparam  SET_PE_VAL        = 5;  // partial
-                                   // param_1_in: PE number
-                                   // param_2_in: index
-localparam  SET_CONV_MODE     = 6; // whole
-localparam  SET_FIX_MAC_MODE  = 7; // whole
-localparam  FORWARD           = 8;
-localparam  SW_WRITE_DATA     = 9;  // tpu_cmd   : 2
-                                   // param_1_in: index
-                                   // param_2_in: data
-localparam  SW_WRITE_WEIGHT   = 10;  // tpu_cmd   : 3
-                                    // param_1_in: index
-                                    // param_2_in: data
+function logic is_tpu_cmd_valid_and_match(input logic [ACLEN-1 : 0] cmd_type);
+    return (tpu_cmd_valid && tpu_cmd == cmd_type);
+endfunction
 
-localparam  SW_WRITE_I    = 11;  // tpu_cmd   : 4
-                                   // param_1_in: index
-                                   // param_2_in: data
-localparam  SET_ROW_IDX       = 12; // partial
-                                   // param_1_in: idx (0~4)
-                                   // param_2_in: value
-localparam  SET_KMN           = 13; // partial
-                                   // param_1_in: idx (0:K, 1:M, 2:N)
-                                   // param_2_in: value
-// localparam  SET_ST_IDX        = 13; // partial
+// //#########################
+// //    TPU cmd table
+// //#########################
+// localparam  RESET             = 0;  // whole
+// localparam  TRIGGER_CONV      = 1;  // whole
+// localparam  TRIGGER_CONV_LAST = 2;  // whole
+// localparam  SET_MUL_VAL       = 3;  // tpu_cmd   : 7
+//                                    // param_1_in: column number
+//                                    // param_2_in: multipled value
+// localparam  SET_ADD_VAL       = 4;  // partial
+//                                    // param_1_in: column number
+//                                    // param_2_in: added value
+// localparam  SET_PE_VAL        = 5;  // partial
+//                                    // param_1_in: PE number
+//                                    // param_2_in: index
+// localparam  SET_CONV_MODE     = 6; // whole
+// localparam  SET_FIX_MAC_MODE  = 7; // whole
+// localparam  FORWARD           = 8;
+// localparam  SW_WRITE_DATA     = 9;  // tpu_cmd   : 2
+//                                    // param_1_in: index
+//                                    // param_2_in: data
+// localparam  SW_WRITE_WEIGHT   = 10;  // tpu_cmd   : 3
+//                                     // param_1_in: index
+//                                     // param_2_in: data
+
+// localparam  SW_WRITE_I    = 11;  // tpu_cmd   : 4
+//                                    // param_1_in: index
+//                                    // param_2_in: data
+// localparam  SET_ROW_IDX       = 12; // partial
 //                                    // param_1_in: idx (0~4)
 //                                    // param_2_in: value
-localparam  SW_READ_DATA       = 14; // whole
-localparam  SET_PRELOAD        = 15; // whole
-localparam  SW_WRITE_PARTIAL   = 16; // whole
-localparam  TRIGGER_BN   = 17; // whole
-localparam  SET_MAX_POOLING = 18; // whole
-localparam  SET_DIVISOR = 19; // whole
-localparam  SET_SOFTMAX = 20; // whole
-localparam  TRIGGER_SOFTMAX = 21; // whole
-localparam  SET_MODE = 22; // param_1: mode
-                           // param_2: len
-localparam  TRIGGER_ADD = 23; 
-localparam  SET_RELU = 24;
-localparam  SET_AVERAGE_POOLING = 25;
-localparam  SET_BN_MUL_SRAM_0 = 26;
-localparam  SET_BN_MUL_SRAM_1 = 27;
-localparam  SET_BN_MUL_SRAM_2 = 28;
-localparam  SET_BN_MUL_SRAM_3 = 29;
-localparam  SET_BN_ADD_SRAM_0 = 30;
-localparam  SET_BN_ADD_SRAM_1 = 31;
-localparam  SET_BN_ADD_SRAM_2 = 32;
-localparam  SET_BN_ADD_SRAM_3 = 33;
+// localparam  SET_KMN           = 13; // partial
+//                                    // param_1_in: idx (0:K, 1:M, 2:N)
+//                                    // param_2_in: value
+// localparam  SW_READ_DATA       = 14; // whole
+// localparam  SET_PRELOAD        = 15; // whole
+// localparam  SW_WRITE_PARTIAL   = 16; // whole
+// localparam  TRIGGER_BN   = 17; // whole
+// localparam  SET_MAX_POOLING = 18; // whole
+// localparam  SET_DIVISOR = 19; // whole
+// localparam  SET_SOFTMAX = 20; // whole
+// localparam  TRIGGER_SOFTMAX = 21; // whole
+// localparam  SET_MODE = 22; // param_1: mode
+//                            // param_2: len
+// localparam  TRIGGER_ADD = 23; 
+// localparam  SET_RELU = 24;
+// localparam  SET_AVERAGE_POOLING = 25;
+// localparam  SET_BN_MUL_SRAM_0 = 26;
+// localparam  SET_BN_MUL_SRAM_1 = 27;
+// localparam  SET_BN_MUL_SRAM_2 = 28;
+// localparam  SET_BN_MUL_SRAM_3 = 29;
+// localparam  SET_BN_ADD_SRAM_0 = 30;
+// localparam  SET_BN_ADD_SRAM_1 = 31;
+// localparam  SET_BN_ADD_SRAM_2 = 32;
+// localparam  SET_BN_ADD_SRAM_3 = 33;
 
-localparam  SET_I_OFFSET_1    = 34;
-localparam  SET_I_OFFSET_2    = 35;
-localparam  SET_I_OFFSET_3    = 36;
-localparam  SET_I_OFFSET_4    = 37;
+// localparam  SET_I_OFFSET_1    = 34;
+// localparam  SET_I_OFFSET_2    = 35;
+// localparam  SET_I_OFFSET_3    = 36;
+// localparam  SET_I_OFFSET_4    = 37;
 
-localparam  SET_COL_IDX       = 38; 
+// localparam  SET_COL_IDX       = 38; 
 
-localparam RESET_LANS     = 39; 
-localparam SET_LANS_IDX   = 40;
-localparam SRAM_NEXT      = 41;
-localparam POOLING_START  = 42;
-localparam RESET_POOLING_IDX = 43;
+// localparam RESET_LANS     = 39; 
+// localparam SET_LANS_IDX   = 40;
+// localparam SRAM_NEXT      = 41;
+// localparam POOLING_START  = 42;
+// localparam RESET_POOLING_IDX = 43;
 
-typedef enum {IDLE_S, HW_RESET_S, 
+typedef enum {IDLE_S, // HW_RESET_S, 
               LOAD_IDX_S,
               READ_DATA_1_S, READ_DATA_2_S, 
               READ_DATA_3_S, READ_DATA_4_S,
@@ -142,26 +135,15 @@ typedef enum {IDLE_S, HW_RESET_S,
               NEXT_ROW_S,
               NEXT_COL_S,
               PRELOAD_DATA_S,
-              BN_S,
               FMA_1_S,
               FMA_2_S,
               FMA_3_S,
               FMA_WAIT_IDLE_S,
-              START_POOLING_S,
-              WAIT_POOLING_S,
               AVG_POOLING_ACC_S,
               WAIT_AVG_POOLING_ACC_S,
               AVG_POOLING_DIV_S,
               WAIT_AVG_POOLING_DIV_S,
-              WAIT_BN_S,
-              STORE_BN_S,
-              BN_INC_S,
-              BN_INC_2_S,
-              BN_INC_3_S,
               WAIT_MAX_POOLING_S,
-              SET_MUL_VAL_S, 
-              SET_ADD_VAL_S, 
-              SET_PE_VAL_S, 
               SET_CONV_MODE_S, 
               SET_FIX_MAC_MODE_S,
               SW_READ_DATA_S,
@@ -176,8 +158,7 @@ typedef enum {IDLE_S, HW_RESET_S,
 typedef enum {SW_READ,   SW_WRITE,
               TPU_READ,  TPU_WRITE,
               DRAM_READ, DRAM_WRITE} gbuff_state_t;
-gbuff_state_t gbuff_1_status, gbuff_2_status,
-              gbuff_3_status, gbuff_4_status;
+
 gbuff_state_t gbuff_status  [0 : 3];
 gbuff_state_t weight_status [0 : 3];
 gbuff_state_t I_status      [0 : 3];
@@ -196,8 +177,8 @@ logic                        mmu_busy;     // 0->idle, 1->busy
 //#    INDEX START REG    #
 //#########################
 /*
-row_idx: base address
-*/
+ * row_idx: base address
+ */
 logic [ADDR_BITS-1  : 0] row_idx       [0 : 3];
 logic [ADDR_BITS-1  : 0] row_acc;
 logic [ADDR_BITS-1  : 0] row_offset;
@@ -219,8 +200,6 @@ logic [ADDR_BITS-1 : 0] K_reg, M_reg, N_reg; // (M * K) (K * N)
 logic                        mmu_cmd_valid;  // cmd
 logic [ACLEN : 0]            mmu_cmd;        // cmd
 logic [DATA_WIDTH*4-1 : 0]   mmu_param_in [0 : 3]; // data 1
-// logic   [DATA_WIDTH*4-1 : 0]   mmu_param_2_in; // data 2
-
 
 //#########################
 //#         GBUFF         #
@@ -282,7 +261,6 @@ logic [8:0] sa_in_cnt, sa_forward_cnt;
  * mode: 1 -> BatchNorm
  * mode: 2 -> skip add
  */
-// logic   [DATA_WIDTH*4-1 : 0]   tpu_data [0 : 3];
 logic [1 : 0] mode;
 logic   [ADDR_BITS-1  : 0]   bn_len;
 logic   [ADDR_BITS-1  : 0]   bn_cnt;
@@ -344,7 +322,6 @@ logic   [DATA_WIDTH*4-1 : 0]  fma_out_r;
 logic   [ADDR_BITS-1    : 0]  sram_r_idx [0 : 3];
 logic   [ADDR_BITS-1    : 0]  sram_w_idx;
 
-// logic   [ADDR_BITS-1    : 0]  calc_num;
 logic                         relu_en;
 
 logic   [ADDR_BITS-1    : 0]  send_cnt;
@@ -378,13 +355,6 @@ logic   [ADDR_BITS-1    : 0] acc_recv_cnt;
  */
 logic enable_max_pooling;
 logic enable_avg_pooling;
-logic   [DATA_WIDTH-1 : 0] max_pooling_data [0 : 19];
-logic                      max_pooling_data_valid [0 : 20];
-logic   [7 : 0] cmp_result [0 : 20];
-logic                        cmp_result_valid [0 : 20];
-logic                        cmp_result_valid_reg [0 : 20];
-logic                        cmp_in_valid [0 : 20];
-// logic   [DATA_WIDTH-1 : 0  ] max_pooling_result;
 // 3x3
 // 1 2 3 4 5 6 7 8 9
 // 12 34 56 78 9 L1
@@ -491,14 +461,18 @@ end
 //#########################
 always_comb begin
     case (curr_state)
-    IDLE_S: if(tpu_cmd_valid && tpu_cmd == TRIGGER_CONV    ) next_state = LOAD_IDX_S;
-            else if(tpu_cmd_valid && tpu_cmd == SW_READ_DATA    ) next_state = SW_READ_DATA_S;
-            else if(tpu_cmd_valid && tpu_cmd == TRIGGER_BN    ) next_state = BN_S;
-            else if(tpu_cmd_valid && tpu_cmd == SET_SOFTMAX    ) next_state = WAIT_SF_ACC_S;
-            else if(tpu_cmd_valid && tpu_cmd == TRIGGER_SOFTMAX    ) next_state = WAIT_SF_S;
-            else if(tpu_cmd_valid && tpu_cmd == TRIGGER_ADD) next_state = FMA_1_S;
-            else         next_state = IDLE_S;
-    HW_RESET_S    : next_state = IDLE_S;
+    IDLE_S: if     ( is_tpu_cmd_valid_and_match(TRIGGER_CONV   ) ) 
+                next_state = LOAD_IDX_S;
+            else if( is_tpu_cmd_valid_and_match(SW_READ_DATA   ) ) 
+                next_state = SW_READ_DATA_S;
+            else if( is_tpu_cmd_valid_and_match(SET_SOFTMAX    ) ) 
+                next_state = WAIT_SF_ACC_S;
+            else if( is_tpu_cmd_valid_and_match(TRIGGER_SOFTMAX) ) 
+                next_state = WAIT_SF_S;
+            else if( is_tpu_cmd_valid_and_match(TRIGGER_ADD    ) ) 
+                next_state = FMA_1_S;
+            else         
+                next_state = IDLE_S;
     LOAD_IDX_S    : next_state = PRELOAD_DATA_S;
     PRELOAD_DATA_S: next_state = READ_DATA_1_S;
     READ_DATA_1_S : next_state = READ_DATA_2_S;
@@ -506,9 +480,8 @@ always_comb begin
     READ_DATA_3_S : next_state = READ_DATA_4_S;
     READ_DATA_4_S : next_state = READ_DATA_5_S;
     READ_DATA_5_S : next_state = TRIGGER_S;
-    // READ_DATA_6_S : next_state = TRIGGER_S;
     TRIGGER_S  : if(K_cnt == K_reg - 2) next_state = TRIGGER_LAST_S;
-                    else                   next_state = TRIGGER_S;
+                 else                   next_state = TRIGGER_S;
     TRIGGER_LAST_S : next_state = FORWARD_S;
     FORWARD_S: if(sa_forward_cnt == 6)  next_state = WAIT_IDLE_S;
                else                     next_state = FORWARD_S;
@@ -522,15 +495,6 @@ always_comb begin
              else                   next_state = NEXT_COL_S;
     NEXT_ROW_S: next_state = PRELOAD_DATA_S;
     NEXT_COL_S: next_state = PRELOAD_DATA_S;
-    BN_S: next_state = WAIT_BN_S;
-    WAIT_BN_S: if(bn_valid && !enable_max_pooling) next_state = STORE_BN_S;
-               else if(cmp_result_valid_reg[7] && enable_max_pooling) next_state = IDLE_S;
-               else next_state = WAIT_BN_S;
-    STORE_BN_S: if(P_index_reg[0] == bn_len - 1) next_state = IDLE_S;
-                else next_state = BN_INC_S;
-    BN_INC_S: next_state = BN_INC_2_S;
-    BN_INC_2_S: next_state = BN_INC_3_S;
-    BN_INC_3_S: next_state = BN_S;
     FMA_1_S: next_state = FMA_2_S;
     FMA_2_S: next_state = FMA_3_S;
     FMA_3_S: if(send_cnt + 4 >= calc_len) 
@@ -539,20 +503,13 @@ always_comb begin
                 next_state = FMA_3_S;
     FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len && !enable_max_pooling && !enable_avg_pooling)
                         next_state = IDLE_S;
-                     else if(recv_cnt + 4 >= calc_len && enable_max_pooling)
-                        next_state = START_POOLING_S;
                      else if(recv_cnt + 4 >= calc_len && enable_avg_pooling)
                         next_state = AVG_POOLING_ACC_S;
                      else
                         next_state = FMA_WAIT_IDLE_S;
-    START_POOLING_S: next_state = WAIT_POOLING_S;
-    WAIT_POOLING_S : if(cmp_result_valid_reg[7]) 
-                        next_state = IDLE_S;
-                     else 
-                        next_state = WAIT_POOLING_S;
-    AVG_POOLING_ACC_S: if(pooling_index == 48)
+    AVG_POOLING_ACC_S:  if(pooling_index == 48)
                             next_state = WAIT_AVG_POOLING_ACC_S;
-                       else 
+                        else 
                             next_state = AVG_POOLING_ACC_S;
     WAIT_AVG_POOLING_ACC_S: if(acc_recv_cnt == 49)
                                 next_state = AVG_POOLING_DIV_S;
@@ -693,7 +650,6 @@ always_ff @(posedge clk_i) begin
     end
     else if(curr_state == NEXT_ROW_S) begin
         for(int i = 0; i < 4; i++) begin
-            // row_idx[i] <= row_idx[i] + K_cnt * 4;
             row_idx[i] <= row_idx_start[i];
         end
     end
@@ -792,9 +748,6 @@ always_ff @(posedge clk_i) begin
     if(curr_state == IDLE_S) begin
         col_acc <= 0;
     end
-    // else if(curr_state == NEXT_ROW_S) begin
-    //     col_acc <= 0;
-    // end
     else if(curr_state == NEXT_COL_S) begin
         col_acc <= col_acc + 4;
     end
@@ -961,7 +914,7 @@ end
 //#########################
 always_comb begin
     for (int i = 0; i < 4; i++) begin
-        if(curr_state == STORE_S || curr_state == STORE_BN_S) begin
+        if(curr_state == STORE_S) begin
             P_status[i] = TPU_WRITE;
         end
         else if(tpu_cmd_valid_reg && tpu_cmd_reg == SW_READ_DATA) begin
@@ -984,7 +937,7 @@ always_ff @(posedge clk_i)begin
         if(curr_state == IDLE_S) begin
             P_index_reg[i] <= 0;
         end
-        else if(curr_state == STORE_S || curr_state == STORE_BN_S) begin
+        else if(curr_state == STORE_S) begin
             P_index_reg[i] <= P_index_reg[i] + 1;
         end
     end
@@ -1020,16 +973,6 @@ always_ff @(posedge clk_i) begin
 end
 
 //#########################
-//#      P DATA ST        #
-//#########################
-// always_comb begin
-//         tpu_data[0] <= tpu_data_1_in;
-//         tpu_data[1] <= tpu_data_2_in;
-//         tpu_data[2] <= tpu_data_3_in;
-//         tpu_data[3] <= tpu_data_4_in;
-// end
-
-//#########################
 //#      P DATA IN        #
 //#########################
 always_ff @(posedge clk_i) begin
@@ -1037,7 +980,6 @@ always_ff @(posedge clk_i) begin
         P_data_in[i] <= (P_status[i] == SW_READ   ) ? 0
                       : (P_status[i] == SW_WRITE  ) ? 0 //tpu_data[i] 
                       : (P_status[i] == TPU_READ  ) ? 0 
-                    //   : (P_status[i] == TPU_WRITE && mode == 0 ) ? rdata_out[i]
                       : (P_status[i] == TPU_WRITE && mode == 0 ) ? bn_fma_out_r[i]
                       : (P_status[i] == TPU_WRITE && mode == 1 ) ? bn_data_out[i]
                       : (P_status[i] == DRAM_READ ) ? 0  
@@ -1070,8 +1012,8 @@ always_comb begin
        (curr_state == TRIGGER_S                             ) ||
        (curr_state == TRIGGER_LAST_S                        ) ||
        (curr_state == FORWARD_S                             ) ||
-       (curr_state == READ_DATA_2_S && preload)               ||
-       (curr_state == BN_S)) begin
+       (curr_state == READ_DATA_2_S && preload)               
+        ) begin
         mmu_cmd_valid = 1; 
     end
     else begin
@@ -1090,9 +1032,6 @@ always_comb begin
     end
     else if(curr_state == READ_DATA_2_S) begin
         mmu_cmd = SET_PE_VAL;
-    end
-    else if(curr_state == BN_S) begin
-        mmu_cmd = TRIGGER_BN;
     end
     else begin
         mmu_cmd         = tpu_cmd_reg;
@@ -1238,95 +1177,6 @@ end
 
 always_ff @( posedge clk_i ) begin
     bn_valid_reg <= bn_valid;
-    cmp_result_valid_reg <= cmp_result_valid;
-end
-
-always_ff @( posedge clk_i ) begin
-    if(rst_i) begin
-        for (int i = 0; i < 20; i++) begin
-            max_pooling_data[i] <= 0;
-        end
-    end
-    else begin
-        max_pooling_data[0]  <= pooling_data_r[0];
-        max_pooling_data[1]  <= pooling_data_r[1];
-        max_pooling_data[2]  <= pooling_data_r[2];
-        max_pooling_data[3]  <= pooling_data_r[3];
-        max_pooling_data[4]  <= pooling_data_r[4];
-        max_pooling_data[5]  <= pooling_data_r[5];
-        max_pooling_data[6]  <= pooling_data_r[6];
-        max_pooling_data[7]  <= pooling_data_r[7];
-        max_pooling_data[15] <= pooling_data_r[8];
-    end
-    // else if(bn_valid_reg) begin
-    //     max_pooling_data[0]  <= bn_data_out[0][(DATA_WIDTH*4-1)-:DATA_WIDTH];//[127:31];//DATA_WIDTH
-    //     max_pooling_data[1]  <= bn_data_out[1][(DATA_WIDTH*4-1)-:DATA_WIDTH];
-    //     max_pooling_data[2]  <= bn_data_out[2][(DATA_WIDTH*4-1)-:DATA_WIDTH];
-    //     max_pooling_data[3]  <= bn_data_out[3][(DATA_WIDTH*4-1)-:DATA_WIDTH];
-    //     max_pooling_data[4]  <= bn_data_out[0][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-    //     max_pooling_data[5]  <= bn_data_out[1][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-    //     max_pooling_data[6]  <= bn_data_out[2][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-    //     max_pooling_data[7]  <= bn_data_out[3][(DATA_WIDTH*3-1)-:DATA_WIDTH];
-    //     max_pooling_data[15] <= bn_data_out[0][(DATA_WIDTH*2-1)-:DATA_WIDTH];
-    // end
-    // 0 ~ 6
-    for(int i = 0; i < 7; i++) begin
-        if(cmp_result_valid_reg[i]) begin
-            max_pooling_data[i+8]  <= (cmp_result[i]==1) ? max_pooling_data[i*2] 
-                                                      : max_pooling_data[i*2+1];
-        end
-    end
-end
-
-always_ff @( posedge clk_i ) begin
-    for (int i = 0; i < 4; i++) begin
-        if(curr_state == START_POOLING_S) begin
-            cmp_in_valid[i] <= 1;
-        end
-        else begin
-            cmp_in_valid[i] <= 0;
-        end 
-    end
-    cmp_in_valid[4]  <= cmp_result_valid_reg[0];
-    cmp_in_valid[5]  <= cmp_result_valid_reg[2];
-
-    cmp_in_valid[6]  <= cmp_result_valid_reg[4];
-
-    cmp_in_valid[7] <= cmp_result_valid_reg[6];
-
-
-end
-
-// mid
-generate
-for (genvar i = 0; i < 7; i++) begin
-    floating_point_cmp cmp(
-        .aclk(clk_i),
-        .s_axis_a_tdata(max_pooling_data[i*2]),
-        .s_axis_a_tvalid(cmp_in_valid[i]),
-        .s_axis_b_tdata(max_pooling_data[i*2+1]),
-        .s_axis_b_tvalid(cmp_in_valid[i]),
-        .m_axis_result_tdata(cmp_result[i]),
-        .m_axis_result_tvalid(cmp_result_valid[i])
-    );
-end
-endgenerate
-// last
-floating_point_cmp cmp(
-        .aclk(clk_i),
-        .s_axis_a_tdata(max_pooling_data[14]),
-        .s_axis_a_tvalid(cmp_in_valid[7]),
-        .s_axis_b_tdata(max_pooling_data[15]),
-        .s_axis_b_tvalid(cmp_in_valid[7]),
-        .m_axis_result_tdata(cmp_result[7]),
-        .m_axis_result_tvalid(cmp_result_valid[7])
-    );
-
-always_ff @( posedge clk_i ) begin
-    if(cmp_result_valid_reg[7]) begin
-        ret_max_pooling  <= (cmp_result[7]==1) ? max_pooling_data[14] 
-                                               : max_pooling_data[15];
-    end
 end
 
 //#########################

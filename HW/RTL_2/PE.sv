@@ -48,7 +48,8 @@
 // =============================================================================
 
 
-`include "config.svh"
+// `include "config.svh"
+`define VIVADO_ENV
 
 module PE
 #(parameter ACLEN  = 8,
