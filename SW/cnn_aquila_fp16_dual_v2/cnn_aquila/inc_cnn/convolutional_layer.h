@@ -594,8 +594,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         int second_core_en = 0;
         if(o + weight_num < end) {
-            // second_core_en = 1;
-            second_core_en = 0;
+            second_core_en = 1;
+            // second_core_en = 0;
             o_2 = o + weight_num;
             remain_oc_2 = min(weight_num, end - o_2);
         }
@@ -771,8 +771,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         int second_core_en;
         if(o + weight_num < end) {
-            // second_core_en = 1;
-            second_core_en = 0;
+            second_core_en = 1;
+            // second_core_en = 0;
             o_2 = o + weight_num;
             remain_oc_2 = min(weight_num, end - o_2);
         }
