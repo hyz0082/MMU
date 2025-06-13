@@ -40,86 +40,35 @@ module TPU
     output  logic   [DATA_WIDTH-1 : 0] ret_avg_pooling,
     output  logic   [DATA_WIDTH-1 : 0] ret_softmax_result,
     
-    // output  logic   [DATA_WIDTH*4-1 : 0] rdata_2_out,
-    // output  logic   [DATA_WIDTH*4-1 : 0] rdata_3_out,
-    // output  logic   [DATA_WIDTH*4-1 : 0] rdata_4_out, 
+    // first dual port sram control signal
+    output  logic                     gbuff_wr_en_0,
+    output  logic  [ADDR_BITS-1  : 0] gbuff_index_0,
+    output  logic  [DATA_WIDTH-1 : 0] gbuff_data_in_0,
+    input   logic  [DATA_WIDTH-1 : 0] gbuff_data_out_0,
+
+    output  logic  [ADDR_BITS-1  : 0] gbuff_index_1,
+    output  logic  [DATA_WIDTH-1 : 0] gbuff_data_in_1,
+    input   logic  [DATA_WIDTH-1 : 0] gbuff_data_out_1,
+
+    // second dual port sram control signal
+    output  logic                     gbuff_wr_en_2,
+    output  logic  [ADDR_BITS-1  : 0] gbuff_index_2,
+    output  logic  [DATA_WIDTH-1 : 0] gbuff_data_in_2,
+    input   logic  [DATA_WIDTH-1 : 0] gbuff_data_out_2,
+
+    output  logic  [ADDR_BITS-1  : 0] gbuff_index_3,
+    output  logic  [DATA_WIDTH-1 : 0] gbuff_data_in_3,
+    input   logic  [DATA_WIDTH-1 : 0] gbuff_data_out_3,
 
     output  logic                        tpu_busy     // 0->idle, 1->busy
 );
 `include "tpu_cmd.svh"
+// `include "interface.svh"
 
 function logic is_tpu_cmd_valid_and_match(input logic [ACLEN-1 : 0] cmd_type);
     return (tpu_cmd_valid && tpu_cmd == cmd_type);
 endfunction
 
-// //#########################
-// //    TPU cmd table
-// //#########################
-// localparam  RESET             = 0;  // whole
-// localparam  TRIGGER_CONV      = 1;  // whole
-// localparam  TRIGGER_CONV_LAST = 2;  // whole
-// localparam  SET_MUL_VAL       = 3;  // tpu_cmd   : 7
-//                                    // param_1_in: column number
-//                                    // param_2_in: multipled value
-// localparam  SET_ADD_VAL       = 4;  // partial
-//                                    // param_1_in: column number
-//                                    // param_2_in: added value
-// localparam  SET_PE_VAL        = 5;  // partial
-//                                    // param_1_in: PE number
-//                                    // param_2_in: index
-// localparam  SET_CONV_MODE     = 6; // whole
-// localparam  SET_FIX_MAC_MODE  = 7; // whole
-// localparam  FORWARD           = 8;
-// localparam  SW_WRITE_DATA     = 9;  // tpu_cmd   : 2
-//                                    // param_1_in: index
-//                                    // param_2_in: data
-// localparam  SW_WRITE_WEIGHT   = 10;  // tpu_cmd   : 3
-//                                     // param_1_in: index
-//                                     // param_2_in: data
-
-// localparam  SW_WRITE_I    = 11;  // tpu_cmd   : 4
-//                                    // param_1_in: index
-//                                    // param_2_in: data
-// localparam  SET_ROW_IDX       = 12; // partial
-//                                    // param_1_in: idx (0~4)
-//                                    // param_2_in: value
-// localparam  SET_KMN           = 13; // partial
-//                                    // param_1_in: idx (0:K, 1:M, 2:N)
-//                                    // param_2_in: value
-// localparam  SW_READ_DATA       = 14; // whole
-// localparam  SET_PRELOAD        = 15; // whole
-// localparam  SW_WRITE_PARTIAL   = 16; // whole
-// localparam  TRIGGER_BN   = 17; // whole
-// localparam  SET_MAX_POOLING = 18; // whole
-// localparam  SET_DIVISOR = 19; // whole
-// localparam  SET_SOFTMAX = 20; // whole
-// localparam  TRIGGER_SOFTMAX = 21; // whole
-// localparam  SET_MODE = 22; // param_1: mode
-//                            // param_2: len
-// localparam  TRIGGER_ADD = 23; 
-// localparam  SET_RELU = 24;
-// localparam  SET_AVERAGE_POOLING = 25;
-// localparam  SET_BN_MUL_SRAM_0 = 26;
-// localparam  SET_BN_MUL_SRAM_1 = 27;
-// localparam  SET_BN_MUL_SRAM_2 = 28;
-// localparam  SET_BN_MUL_SRAM_3 = 29;
-// localparam  SET_BN_ADD_SRAM_0 = 30;
-// localparam  SET_BN_ADD_SRAM_1 = 31;
-// localparam  SET_BN_ADD_SRAM_2 = 32;
-// localparam  SET_BN_ADD_SRAM_3 = 33;
-
-// localparam  SET_I_OFFSET_1    = 34;
-// localparam  SET_I_OFFSET_2    = 35;
-// localparam  SET_I_OFFSET_3    = 36;
-// localparam  SET_I_OFFSET_4    = 37;
-
-// localparam  SET_COL_IDX       = 38; 
-
-// localparam RESET_LANS     = 39; 
-// localparam SET_LANS_IDX   = 40;
-// localparam SRAM_NEXT      = 41;
-// localparam POOLING_START  = 42;
-// localparam RESET_POOLING_IDX = 43;
 
 typedef enum {IDLE_S, // HW_RESET_S, 
               LOAD_IDX_S,
@@ -1182,84 +1131,90 @@ end
 //#########################
 //#      LINE BUFFER      #
 //#########################
+
 /*
- * single port ram
+ * dual port sram
  */
-// generate
-// for (genvar i = 0; i < 4; i++) begin
-//     global_buffer #(
-//     .ADDR_BITS(ADDR_BITS), // ADDR_BITS
-//     .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-//     )
-//     gbuff (
-//         .clk_i   (clk_i),
-//         .rst_i   (rst_i),
-//         .wr_en   ((mode) ? 0             : gbuff_wr_en[i]),
-//         .index   ((mode) ? sram_r_idx[i] : gbuff_index[i]),
-//         .data_in (gbuff_data_in[i]),
-//         .data_out(gbuff_data_out[i])
-//     );
+// global_buffer_dp #(
+// .ADDR_BITS(ADDR_BITS), // ADDR_BITS
+// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+// )
+// gbuff_1 (
+//     .clk_i   (clk_i),
+
+//     .wr_en_1   ((mode) ? 0             : gbuff_wr_en[0]),
+//     .index_1   ((mode) ? sram_r_idx[0] : gbuff_index[0]),
+//     .data_in_1 (gbuff_data_in[0]),
+//     .data_out_1(gbuff_data_out[0]),
+
+//     .index_2((mode) ? sram_r_idx[1] : gbuff_index[1]),
+//     .data_in_2(gbuff_data_in[1]),
+//     .data_out_2(gbuff_data_out[1])
+// );
+
+// first dual port sram control signal
+always_comb begin
+
+    gbuff_wr_en_0     = ((mode) ? 0             : gbuff_wr_en[0]);
+    gbuff_index_0     = ((mode) ? sram_r_idx[0] : gbuff_index[0]);
+    gbuff_data_in_0   = (gbuff_data_in[0]);
+
+    gbuff_index_1     = ((mode) ? sram_r_idx[1] : gbuff_index[1]);
+        
+    gbuff_data_out[0] = gbuff_data_out_0;  
+    gbuff_data_out[1] = gbuff_data_out_1;
+
+end
+
+// global_buffer_dp #(
+// .ADDR_BITS(ADDR_BITS), // ADDR_BITS
+// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+// )
+// gbuff_2 (
+//     .clk_i   (clk_i),
+
+//     .wr_en_1   ((mode) ? 0             : gbuff_wr_en[2]),
+//     .index_1   ((mode) ? sram_r_idx[2] : gbuff_index[2]),
+//     .data_in_1 (gbuff_data_in[2]),
+//     .data_out_1(gbuff_data_out[2]),
+
+//     .index_2((mode) ? sram_r_idx[3] : gbuff_index[3]),
+//     .data_in_2(gbuff_data_in[3]),
+//     .data_out_2(gbuff_data_out[3])
+// );
+
+// second dual port sram control signal
+// always_comb begin
+
+//     gbuff_wr_en_2     = ((mode) ? 0             : gbuff_wr_en[2]);
+    
+//     gbuff_index_2     = ((mode) ? sram_r_idx[2] : gbuff_index[2]);
+    
+//     gbuff_data_in_2   = (gbuff_data_in[2]);
+    
+//     gbuff_data_out[2] = gbuff_data_out_2;
+
+//     gbuff_index_3     = ((mode) ? sram_r_idx[3] : gbuff_index[3]);
+    
+//     gbuff_data_in_3   = (gbuff_data_in[3]);
+    
+//     gbuff_data_out[3] = gbuff_data_out_3;
 // end
-// endgenerate
-/*
- * dua; port sram
- */
-global_buffer_dp #(
-.ADDR_BITS(ADDR_BITS), // ADDR_BITS
-.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-)
-gbuff_1 (
-    .clk_i   (clk_i),
+// second dual port sram control signal
+always_comb begin
+    gbuff_wr_en_2     = ((mode) ? 0             : gbuff_wr_en[2]);
+    gbuff_index_2     = ((mode) ? sram_r_idx[2] : gbuff_index[2]);
+    gbuff_data_in_2   = (gbuff_data_in[2]);
 
-    .wr_en_1   ((mode) ? 0             : gbuff_wr_en[0]),
-    .index_1   ((mode) ? sram_r_idx[0] : gbuff_index[0]),
-    .data_in_1 (gbuff_data_in[0]),
-    .data_out_1(gbuff_data_out[0]),
-
-    .index_2((mode) ? sram_r_idx[1] : gbuff_index[1]),
-    .data_in_2(gbuff_data_in[1]),
-    .data_out_2(gbuff_data_out[1])
-);
-
-global_buffer_dp #(
-.ADDR_BITS(ADDR_BITS), // ADDR_BITS
-.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-)
-gbuff_2 (
-    .clk_i   (clk_i),
-
-    .wr_en_1   ((mode) ? 0             : gbuff_wr_en[2]),
-    .index_1   ((mode) ? sram_r_idx[2] : gbuff_index[2]),
-    .data_in_1 (gbuff_data_in[2]),
-    .data_out_1(gbuff_data_out[2]),
-
-    .index_2((mode) ? sram_r_idx[3] : gbuff_index[3]),
-    .data_in_2(gbuff_data_in[3]),
-    .data_out_2(gbuff_data_out[3])
-);
+    gbuff_index_3     = ((mode) ? sram_r_idx[3] : gbuff_index[3]);
+        
+    gbuff_data_out[2] = gbuff_data_out_2;  
+    gbuff_data_out[3] = gbuff_data_out_3;
+end
 
 //#########################
 //#     WEIGHT BUFFER     #
 //#########################
-/*
- * single port sram
- */
-// generate
-// for (genvar i = 0; i < 4; i++) begin
-//     global_buffer #(
-//     .ADDR_BITS(ADDR_BITS),
-//     .DATA_BITS(DATA_WIDTH)
-//     )
-//     weight (
-//         .clk_i   (clk_i),
-//         .rst_i   (rst_i),
-//         .wr_en   ((mode) ? 0             : weight_wr_en[i]),
-//         .index   ((mode) ? sram_r_idx[i] : weight_index[i]),
-//         .data_in (weight_in[i]),
-//         .data_out(weight_out[i])
-//     );
-// end
-// endgenerate
 /*
  * dual port sram
  */
@@ -1300,77 +1255,19 @@ weight_2 (
 //#########################
 //#       I BUFFER        #
 //#########################
-/*
- * single port sram
-*/
-// generate
-// for (genvar i = 0; i < 4; i++) begin
-//     global_buffer #(
-//     .ADDR_BITS(ADDR_BITS),
-//     .DATA_BITS(DATA_WIDTH)
-//     )
-//     I_gbuff (
-//         .clk_i(clk_i),
-//         .rst_i(rst_i),
-//         .wr_en(I_wr_en[i]),
-//         .index(I_index[i]),
-//         .data_in(I_in[i]),
-//         .data_out(I_out[i])
-//     );
-// end
-// endgenerate
-/*
- * dual port sram
- */
-// global_buffer_dp #(
-// .ADDR_BITS(13), // ADDR_BITS
-// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-// )
-// index_1 (
-//     .clk_i   (clk_i),
-
-//     .wr_en_1   (I_wr_en[0]),
-//     .index_1   (I_index[0]),
-//     .data_in_1 (I_in[0]),
-//     .data_out_1(I_out[0]),
-
-//     .index_2(I_index[1]),
-//     .data_in_2(I_in[1]),
-//     .data_out_2(I_out[1])
-// );
-
-// global_buffer_dp #(
-// .ADDR_BITS(13), // ADDR_BITS
-// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-// )
-// index_2 (
-//     .clk_i   (clk_i),
-
-//     .wr_en_1   (I_wr_en[2]),
-//     .index_1   (I_index[2]),
-//     .data_in_1 (I_in[2]),
-//     .data_out_1(I_out[2]),
-
-//     .index_2(I_index[3]),
-//     .data_in_2(I_in[3]),
-//     .data_out_2(I_out[3])
-// );
 
 global_buffer #(
-.ADDR_BITS(13), // ADDR_BITS
-.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+.ADDR_BITS(13),
+.DATA_BITS(DATA_WIDTH)
 )
 index_1 (
     .clk_i   (clk_i),
 
     .wr_en   (I_wr_en[0]),
     .index   (I_index[0]),
+
     .data_in (I_in[0]),
     .data_out(I_out[0])
-
-    // .index_2(I_index[1]),
-    // .data_in_2(I_in[1]),
-    // .data_out_2(I_out[1])
 );
 
 assign I_out[1] = I_out[0];

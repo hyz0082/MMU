@@ -3,7 +3,8 @@ module data_feeder
    parameter BUF_ADDR_LEN = 32, 
    parameter ACLEN  = 8,
    parameter ADDR_BITS=15,
-   parameter DATA_WIDTH = 16)
+   parameter DATA_WIDTH = 16,
+   parameter GEMM_NUM   = 4)
 (
     input                           clk_i,
     input                           rst_i,
@@ -42,44 +43,7 @@ output logic [4 : 0] data_end_idx_o,
     input logic dram_write_done_i
 );
 `include "config.svh"
-// localparam TPU_CMD_ADDR  = 32'hC4000000;
-// localparam PARAM_1_ADDR  = 32'hC4000004;
-// localparam PARAM_2_ADDR  = 32'hC4000008;
-// localparam BUSY_ADDR     = 32'hC4000020;
-// localparam RET_ADDR      = 32'hC4000010;
-// localparam RET_MAX_POOLING_ADDR      = 32'hC4002010;
-// localparam RET_SOFTMAX_ADDR          = 32'hC4002020;
-
-// localparam DRAM_R_ADDR   = 32'hC4002024;
-// localparam DRAM_R_LENGTH = 32'hC4002028;
-// localparam DRAM_RW          = 32'hC400202C;
-// localparam DRAM_TR   = 32'hC4002030;
-// localparam SRAM_OFFSET   = 32'hC4002034;
-// localparam WRITE_DATA_TYPE_ADDR = 32'hC4002038;
-// localparam [31:0] DRAM_WRITE_ADDR [0:3] = {32'hC400203C,
-//                                            32'hC4002040,
-//                                            32'hC4002044,
-//                                            32'hC4002048};
-// localparam NUM_LANS_ADDR     = 32'hC400204C;
-// localparam DRAM_WRITE_LEN    = 32'hC4002050;
-// localparam TR_DRAM_W         = 32'hC4002054;
-// localparam OUTPUT_RECV_CNT_ADDR = 32'hC4002058;
-// localparam SW_DATA_ADDR =  32'hC400205C;
-// localparam SW_WRITE_DRAM_MODE_ADDR = 32'hC4002060;
-// localparam RET_AVG_POOLING_ADDR    = 32'hC4002064;
-
-// localparam GEMM_CORE_SEL_ADDR = 32'hC4002068;
-// localparam BUSY_ADDR_2        = 32'hC400206C;
-
-// localparam READ_OFFSET = 32'hC4002070;
-// localparam READ_ROUNDS = 32'hC4002074;
-
-
-// localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
-//                                           32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
-//                                           32'hC4001800, 32'hC4001900, 32'hC4001A00, 32'hC4001B00,
-//                                           32'hC4001C00, 32'hC4001D00, 32'hC4001E00, 32'hC4001F00};
-
+// `include "interface.svh"
 /*
  *  DRAM ACCESS FSM
  */
@@ -223,6 +187,11 @@ logic [DATA_WIDTH-1 : 0] sw_data_r;
 logic [DATA_WIDTH-1 : 0] sw_write_data_r;
 logic sw_write_dram_mode;
 logic rw_to_gemm;
+
+logic                     gbuff_wr_en [0 : GEMM_NUM];
+logic  [ADDR_BITS-1  : 0] gbuff_index [0 : GEMM_NUM];
+logic  [DATA_WIDTH-1 : 0] gbuff_data_in[0 : GEMM_NUM];
+logic  [DATA_WIDTH-1 : 0] gbuff_data_out[0 : GEMM_NUM];
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
@@ -390,6 +359,43 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
+
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+gbuff_1 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   (gbuff_wr_en[0]),
+    .index_1   (gbuff_index[0]),
+    .data_in_1 (gbuff_data_in[0]),
+    .data_out_1(gbuff_data_out[0]),
+
+    .index_2(gbuff_index[1]),
+    .data_in_2(gbuff_data_in[1]),
+    .data_out_2(gbuff_data_out[1])
+);
+
+
+global_buffer_dp #(
+.ADDR_BITS(ADDR_BITS), // ADDR_BITS
+.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+)
+gbuff_2 (
+    .clk_i   (clk_i),
+
+    .wr_en_1   (gbuff_wr_en[2]),
+    .index_1   (gbuff_index[2]),
+    .data_in_1 (gbuff_data_in[2]),
+    .data_out_1(gbuff_data_out[2]),
+
+    .index_2(gbuff_index[3]),
+    .data_in_2(gbuff_data_in[3]),
+    .data_out_2(gbuff_data_out[3])
+);
+
+
 TPU #(
     .ACLEN(ACLEN),
     .ADDR_BITS(ADDR_BITS),
@@ -417,6 +423,25 @@ t1 (
     .ret_max_pooling(ret_max_pooling),
     .ret_avg_pooling(ret_avg_pooling),
     .ret_softmax_result(ret_softmax_result),
+
+    // first dual port sram control signal
+    .gbuff_wr_en_0(gbuff_wr_en[0]),
+    .gbuff_index_0(gbuff_index[0]),
+    .gbuff_data_in_0(gbuff_data_in[0]),
+    .gbuff_data_out_0(gbuff_data_out[0]),
+
+    .gbuff_index_1(gbuff_index[1]),
+    .gbuff_data_out_1(gbuff_data_out[1]),
+
+    // second dual port sram control signal
+    .gbuff_wr_en_2(gbuff_wr_en[2]),
+    .gbuff_index_2(gbuff_index[2]),
+    .gbuff_data_in_2(gbuff_data_in[2]),
+    .gbuff_data_out_2(gbuff_data_out[2]),
+
+    .gbuff_index_3(gbuff_index[3]),
+    .gbuff_data_out_3(gbuff_data_out[3]),
+
     .tpu_busy(tpu_busy)     
 );
 
@@ -447,6 +472,25 @@ t2 (
     .ret_max_pooling(ret_max_pooling_2),
     .ret_avg_pooling(ret_avg_pooling_2),
     .ret_softmax_result(ret_softmax_result_2),
+
+    // first dual port sram control signal
+    // .gbuff_wr_en_0(gbuff_wr_en[0]),
+    // .gbuff_index_0(gbuff_index[0]),
+    // .gbuff_data_in_0(gbuff_data_in[0]),
+    .gbuff_data_out_0(gbuff_data_out[0]),
+
+    // .gbuff_index_1(gbuff_index[1]),
+    .gbuff_data_out_1(gbuff_data_out[1]),
+
+    // second dual port sram control signal
+    // .gbuff_wr_en_2(gbuff_wr_en[2]),
+    // .gbuff_index_2(gbuff_index[2]),
+    // .gbuff_data_in_2(gbuff_data_in[2]),
+    .gbuff_data_out_2(gbuff_data_out[2]),
+
+    // .gbuff_index_3(gbuff_index[3]),
+    .gbuff_data_out_3(gbuff_data_out[3]),
+
     .tpu_busy(tpu_busy_2)     
 );
 
