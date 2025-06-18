@@ -92,6 +92,17 @@ volatile unsigned int * BUSY_ADDR_2        = (unsigned int *)0xC400206C;
 volatile unsigned int * READ_OFFSET = (unsigned int *)0xC4002070;
 volatile unsigned int * READ_ROUNDS = (unsigned int *)0xC4002074;
 
+volatile unsigned int *  CURRINPUTTYPE = (unsigned int *)0xC4002078;
+volatile unsigned int *  INPUTLENGTH   = (unsigned int *)0xC400207C;
+volatile unsigned int *  PADDINGSIZE   = (unsigned int *)0xC4002080;
+
+volatile unsigned int *  RESET_SRAM    = (unsigned int *)0xC4002084;
+
+volatile unsigned int *   INPUTHEIGHT = (unsigned int *)0xC4002088;
+
+volatile unsigned int *   BOUNDARYPADDINGSIZE = (unsigned int *)0xC400208C;
+
+
 volatile my_float_t * TPU_DATA_ADDR[16] = {(my_float_t*)0xC4001000, 
                                         (my_float_t*)0xC4001100, 
                                         (my_float_t*)0xC4001200, 
@@ -856,7 +867,8 @@ void read_conv_weight_cmd(int length, int depth, uint32_t addr) {
 }
 
 void read_conv_input_cmd(int depth, int offset, uint32_t addr) {
-    reset_sram_offset_cmd();
+    // reset_sram_offset_cmd();
+    set_dram_read_input_cmd();
 
     set_read_rounds_cmd(depth);
     set_read_offset_cmd(offset);
@@ -888,3 +900,53 @@ void read_batchNorm_weight_cmd(int length, uint32_t addr_1, uint32_t addr_2) {
     wait_idle_2_quick_cmd();
     wait_idle_cmd();
 }
+
+void set_currinputtype_cmd(int val) {
+    *CURRINPUTTYPE = val;
+    __asm__ volatile ("nop");
+}
+
+void set_inputlength_cmd(int val) {
+    *INPUTLENGTH = val;
+    __asm__ volatile ("nop");
+}
+
+void set_paddingsize_cmd(int val) {
+    *PADDINGSIZE = val;
+    __asm__ volatile ("nop");
+}
+
+void set_reset_sram_cmd() {
+    reset_sram_offset_cmd();
+
+    *RESET_SRAM = 1;
+
+    wait_idle_quick_cmd();
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+}
+
+void set_sram_offset_cmd(int val) {
+    *SRAM_OFFSET = val;
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+}
+
+void set_input_height_cmd(int val) {
+    *INPUTHEIGHT = val;
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+}
+
+void set_boundary_padding_size_cmd(int val) {
+    *BOUNDARYPADDINGSIZE = val;
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+}
+

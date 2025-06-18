@@ -64,7 +64,8 @@ typedef enum {IDLE_S,
               DUMMY_1_S,
               WAIT_WRITE_DONE_S,
               READ_NEXT_ROUND_S,
-              RECV_NEXT_ROUND_S
+              RECV_NEXT_ROUND_S,
+              RESET_SRAM_S
               } state_t;
 state_t send_req_curr_state;
 state_t send_req_next_state;
@@ -156,10 +157,23 @@ logic [5 : 0]           got_len_expect; // max req len = 32
 logic [ADDR_BITS-1 : 0] send_cnt;
 logic [ADDR_BITS-1 : 0] length;
 logic [3 : 0] word_size;
-logic [ADDR_BITS-1 : 0] sram_offset;
+(* mark_debug="true" *) logic [ADDR_BITS-1 : 0] sram_offset;
 logic [3 : 0] data_type;
 logic [6 : 0] addr_offset;
 
+
+(* mark_debug="true" *) logic [9 : 0]           currInputType;
+
+(* mark_debug="true" *) logic [ADDR_BITS-1 : 0] inputLength;
+(* mark_debug="true" *) logic [ADDR_BITS-1 : 0] sramWriteCount;
+
+(* mark_debug="true" *) logic [ADDR_BITS-1 : 0] inputHeight;
+(* mark_debug="true" *) logic [ADDR_BITS-1 : 0] inputHeightCount;
+
+logic [ADDR_BITS-1 : 0] paddingSize;
+logic [ADDR_BITS-1 : 0] boundaryPaddingSize;
+
+logic [ADDR_BITS-1 : 0] sramResetIndex;
 
 /*
  * DRAM WRITE SIGNAL
@@ -330,6 +344,12 @@ always_ff @( posedge clk_i ) begin
         tpu_param_1_in <= data_in[got_addr[5:1]];// data_in
         tpu_param_2_in <= sram_offset;// index
     end
+    else if(write_data_curr_state == RESET_SRAM_S) begin
+        tpu_cmd_valid  <= 1;
+        tpu_cmd        <= 9;
+        tpu_param_1_in <= 0;// data_in
+        tpu_param_2_in <= sram_offset;// index
+    end
     else if(write_data_curr_state == WRITE_INPUT_S && write_data_type == 2) begin
         tpu_cmd_valid  <= 1;
         if     (batchNormOffset == 0) tpu_cmd <= 26;
@@ -474,21 +494,11 @@ t2 (
     .ret_softmax_result(ret_softmax_result_2),
 
     // first dual port sram control signal
-    // .gbuff_wr_en_0(gbuff_wr_en[0]),
-    // .gbuff_index_0(gbuff_index[0]),
-    // .gbuff_data_in_0(gbuff_data_in[0]),
     .gbuff_data_out_0(gbuff_data_out[0]),
-
-    // .gbuff_index_1(gbuff_index[1]),
     .gbuff_data_out_1(gbuff_data_out[1]),
 
     // second dual port sram control signal
-    // .gbuff_wr_en_2(gbuff_wr_en[2]),
-    // .gbuff_index_2(gbuff_index[2]),
-    // .gbuff_data_in_2(gbuff_data_in[2]),
     .gbuff_data_out_2(gbuff_data_out[2]),
-
-    // .gbuff_index_3(gbuff_index[3]),
     .gbuff_data_out_3(gbuff_data_out[3]),
 
     .tpu_busy(tpu_busy_2)     
@@ -661,6 +671,8 @@ always_comb begin
     case (write_data_curr_state)
     IDLE_S: if(S_DEVICE_strobe_i && S_DEVICE_addr_i == DRAM_TR) 
                 write_data_next_state = WAIT_FIFO_DATA_S;
+            else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RESET_SRAM) 
+                write_data_next_state = RESET_SRAM_S;
             else
                 write_data_next_state = IDLE_S;
     WAIT_FIFO_DATA_S: if(!fifo_data_empty_i && rw_to_gemm) 
@@ -682,6 +694,10 @@ always_comb begin
     RECV_NEXT_ROUND_S:  if(recv_rounds_cnt + 1 == read_rounds) 
                             write_data_next_state = IDLE_S;
                         else write_data_next_state = WAIT_FIFO_DATA_S;
+    RESET_SRAM_S:   if(sram_offset == 32767)
+                        write_data_next_state = IDLE_S;
+                    else    
+                        write_data_next_state = RESET_SRAM_S;
     default: write_data_next_state = IDLE_S;
     endcase
 end
@@ -728,11 +744,34 @@ always_ff @( posedge clk_i ) begin
         send_cnt <= 0;
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == SRAM_OFFSET) begin
-        sram_offset <= 0;
+        sram_offset <= S_DEVICE_data_i;
     end
     else if(write_data_curr_state == WRITE_INPUT_S) begin
         send_cnt <= send_cnt + 1;
-        sram_offset <= sram_offset + 1;
+        if(sramWriteCount   + 1 == inputLength && 
+           inputHeightCount + 1 == inputHeight && 
+           write_data_type == 0) begin
+            sram_offset <= sram_offset + boundaryPaddingSize + 1;
+            // if     (currInputType == 0) begin
+            //     sram_offset <= sram_offset + paddingSize*4 + inputLength;
+            // end
+            // else if(currInputType == 1) begin
+            //     sram_offset <= sram_offset + paddingSize*2;
+            // end
+            // else if(currInputType == 2) begin
+            //     sram_offset <= sram_offset + paddingSize*4 + inputLength;
+            // end
+            // else if(currInputType == 3) begin
+            //     sram_offset <= sram_offset + paddingSize*6 + inputLength*2;
+            // end
+        end
+        else if(sramWriteCount + 1 == inputLength && 
+                write_data_type == 0) begin
+            sram_offset <= sram_offset + paddingSize*2 + 1;
+        end
+        else begin
+            sram_offset <= sram_offset + 1;
+        end
     end
     else if(write_data_curr_state == IDLE_S) begin
         send_cnt <= 0;
@@ -740,8 +779,107 @@ always_ff @( posedge clk_i ) begin
     else if(write_data_curr_state == RECV_NEXT_ROUND_S) begin
         send_cnt <= 0;
     end
+    else if(write_data_curr_state == RESET_SRAM_S) begin
+        sram_offset <= sram_offset + 1;
+    end
 end
 
+/*
+ *  type 0: top
+ *  *********
+ *  *       *
+ *  type 1: mid
+ *  *       *
+ *  *       *
+ *  type 2: bottom
+ *  *       *
+ *  *********
+ *  type 3: all
+ *  *********
+ *  *       *
+ *  *********
+ *
+ */
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        currInputType <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == CURRINPUTTYPE) begin
+        currInputType <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        inputLength <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == INPUTLENGTH) begin
+        inputLength <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        paddingSize <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == PADDINGSIZE) begin
+        paddingSize <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        boundaryPaddingSize <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == BOUNDARYPADDINGSIZE) begin
+        boundaryPaddingSize <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        inputHeight <= 0;
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == INPUTHEIGHT) begin
+        inputHeight <= S_DEVICE_data_i;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        sramWriteCount <= 0;
+    end
+    else if(write_data_curr_state == WRITE_INPUT_S) begin
+        if(sramWriteCount + 1 == inputLength) begin
+            sramWriteCount <= 0;
+        end
+        else begin
+            sramWriteCount <= sramWriteCount + 1;
+        end
+    end
+    else if(write_data_curr_state == IDLE_S) begin
+        sramWriteCount <= 0;
+    end
+    else if(write_data_curr_state == RECV_NEXT_ROUND_S) begin
+        sramWriteCount <= 0;
+    end
+end
+
+always_ff @( posedge clk_i ) begin
+    if(rst_i) begin
+        inputHeightCount <= 0;
+    end
+    else if(sramWriteCount + 1 == inputLength && write_data_curr_state ==  WRITE_INPUT_S) begin
+        inputHeightCount <= inputHeightCount + 1;
+    end
+    else if(write_data_curr_state == IDLE_S) begin
+        inputHeightCount <= 0;
+    end
+    else if(write_data_curr_state == RECV_NEXT_ROUND_S) begin
+        inputHeightCount <= 0;
+    end
+   
+end
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin

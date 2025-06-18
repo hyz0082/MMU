@@ -2,6 +2,10 @@
 // `CLP
 `define VIVADO_ENV
 
+
+`ifndef DEF_PARAM
+`define DEF_PARAM
+
 localparam TPU_CMD_ADDR  = 32'hC4000000;
 localparam PARAM_1_ADDR  = 32'hC4000004;
 localparam PARAM_2_ADDR  = 32'hC4000008;
@@ -34,8 +38,26 @@ localparam BUSY_ADDR_2        = 32'hC400206C;
 localparam READ_OFFSET = 32'hC4002070;
 localparam READ_ROUNDS = 32'hC4002074;
 
+localparam CURRINPUTTYPE = 32'hC4002078;
+localparam INPUTLENGTH = 32'hC400207C;
+localparam PADDINGSIZE = 32'hC4002080;
+
+localparam RESET_SRAM = 32'hC4002084;
+
+localparam INPUTHEIGHT = 32'hC4002088;
+
+localparam BOUNDARYPADDINGSIZE = 32'hC400208C;
+
+
 
 localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
                                           32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
                                           32'hC4001800, 32'hC4001900, 32'hC4001A00, 32'hC4001B00,
                                           32'hC4001C00, 32'hC4001D00, 32'hC4001E00, 32'hC4001F00};
+                                          
+                                          
+`else
+
+ 
+
+`endif 
