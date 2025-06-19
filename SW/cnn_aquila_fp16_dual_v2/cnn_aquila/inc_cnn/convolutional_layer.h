@@ -454,14 +454,14 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     out_h_per_op_hw = ((h_per_op_hw - weight_.height_) / h_stride_ + 1);
     int size_per_channel_hw = h_per_op_hw * in_padded_.width_;
 
-    printf("input  shape: (%d, %d, %d)\n", (int)in_.width_, (int)in_.height_, (int)in_.depth_);
-    printf("output shape: (%d, %d, %d)\n", (int)out_.width_, (int)out_.height_, (int)out_.depth_);
-    printf("weight shape: (%d, %d, %d)\n", (int)weight_.width_, (int)weight_.height_, (int)in_.depth_);
-    printf("sizePerChannel   : %d\n", (int)size_per_channel_hw);
-    printf("input  sram usage: %d\n", (int)size_per_channel_hw * (int)in_.depth_);
-    printf("weight sram usage: %d\n", (int)weight_.height_ * (int)weight_.width_ * (int)in_.depth_ * (int)weight_num);
-    printf("each HW conv shape: %d %d %d\n", input_num, weight_num, kernel_len);
-    printf("result sram %d\n", (int)input_num*(int)weight_num);
+    // printf("input  shape: (%d, %d, %d)\n", (int)in_.width_, (int)in_.height_, (int)in_.depth_);
+    // printf("output shape: (%d, %d, %d)\n", (int)out_.width_, (int)out_.height_, (int)out_.depth_);
+    // printf("weight shape: (%d, %d, %d)\n", (int)weight_.width_, (int)weight_.height_, (int)in_.depth_);
+    // printf("sizePerChannel   : %d\n", (int)size_per_channel_hw);
+    // printf("input  sram usage: %d\n", (int)size_per_channel_hw * (int)in_.depth_);
+    // printf("weight sram usage: %d\n", (int)weight_.height_ * (int)weight_.width_ * (int)in_.depth_ * (int)weight_num);
+    // printf("each HW conv shape: %d %d %d\n", input_num, weight_num, kernel_len);
+    // printf("result sram %d\n", (int)input_num*(int)weight_num);
 
     set_KMN_cmd(kernel_len, input_num, weight_num);
     set_conv_cmd(kernel_len);
@@ -477,7 +477,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     set_paddingsize_cmd(paddingSize);
     set_gemm_core_sel_cmd(1);
 
-    printf("padding size: %d\n", paddingSize);
+    // printf("padding size: %d\n", paddingSize);
 
     /*
      * Index Ram Setting
@@ -945,7 +945,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             hardware_compute_time += (clock() - tmp_tick)/ticks_per_msec;
             
             // write result to dram
-            // tmp_tick = clock();
+            tmp_tick = clock();
             set_gemm_core_sel_cmd(1);
             set_dram_write_lens_cmd(remain_num);
             for(int s = 0; s < remain_oc; s++) {
@@ -1035,7 +1035,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             }
             wait_idle_cmd();
             output_offset += input_num;
-            // store_data_time += (clock() - tmp_tick)/ticks_per_msec;
+            store_data_time += (clock() - tmp_tick)/ticks_per_msec;
         }
     }
     // for 1x1 convolution
@@ -1199,7 +1199,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             hardware_compute_time += (clock() - tmp_tick)/ticks_per_msec;
             
             // write result back to dram
-            // tmp_tick = clock();
+            tmp_tick = clock();
             set_gemm_core_sel_cmd(1);
             set_dram_write_lens_cmd(remain_num);
             for(int s = 0; s < remain_oc; s++) {
@@ -1288,7 +1288,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             }
             wait_idle_cmd();
             output_offset += input_num;
-            // store_data_time += (clock() - tmp_tick)/ticks_per_msec;
+            store_data_time += (clock() - tmp_tick)/ticks_per_msec;
         }
     }
     //###########################################################
@@ -1371,12 +1371,10 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     tick = (clock() - tick)/ticks_per_msec;
     printf("It took %7ld msec to perform conv.\n\n", tick);
     printf("It took %7ld msec to perform on preprocess_time.\n", preprocess_time);
-    // printf("It took %7ld msec to perform on hardware_compute_time.\n", hardware_compute_time);
-    // printf("It took %7ld msec to perform on send_data_time.\n", send_data_time);
-    // printf("It took %7ld msec to perform on send_weight_time.\n", send_weight_time);
-    // printf("It took %7ld msec to perform on send_idx_time.\n", send_idx_time);
-    // printf("It took %7ld msec to perform on padding_time.\n", padding_time);
-    // printf("It took %7ld msec to perform on store_data_time.\n\n", store_data_time);
+    printf("It took %7ld msec to perform on hardware_compute_time.\n", hardware_compute_time);
+    printf("It took %7ld msec to perform on send_data_time.\n", send_data_time);
+    printf("It took %7ld msec to perform on send_weight_time.\n", send_weight_time);
+    printf("It took %7ld msec to perform on store_data_time.\n\n", store_data_time);
     printf("[%s] done [%f, %f, ... , %f, %f]\n\n", entry->base.layer_name_, (float_t)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-2]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
 #endif
 }
