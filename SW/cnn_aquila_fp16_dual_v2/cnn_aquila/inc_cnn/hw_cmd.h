@@ -102,6 +102,9 @@ volatile unsigned int *   INPUTHEIGHT = (unsigned int *)0xC4002088;
 
 volatile unsigned int *   BOUNDARYPADDINGSIZE = (unsigned int *)0xC400208C;
 
+volatile unsigned int *   BUSY_ADDR_3        = (unsigned int *)0xC4002090;
+volatile unsigned int *   BUSY_ADDR_4        = (unsigned int *)0xC4002094;
+
 
 volatile my_float_t * TPU_DATA_ADDR[16] = {(my_float_t*)0xC4001000, 
                                         (my_float_t*)0xC4001100, 
@@ -190,7 +193,7 @@ void send_bn_add_data(my_float_t data, int pos){
 }
 
 void reset_cmd() {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *TPU_CMD = RESET;
     __asm__ volatile ("nop");
 
@@ -202,7 +205,7 @@ void reset_cmd() {
 }
 
 void set_KMN_cmd(int K, int M, int N) {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *PARAM_1_ADDR = 0; // K
     *PARAM_2_ADDR = K;
     *TPU_CMD = SET_KMN;
@@ -288,7 +291,7 @@ void send_offset_4_cmd(int data, int pos) {
 }
 
 void set_conv_cmd(int len) {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *PARAM_1_ADDR = len;
     *TPU_CMD = SET_CONV_MODE;
     __asm__ volatile ("nop");
@@ -307,7 +310,7 @@ void set_bn_cmd(int len) {
 }
 
 void set_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *PARAM_1_ADDR = 0;
     *PARAM_2_ADDR = offset_0;
     *TPU_CMD = SET_ROW_IDX;
@@ -346,7 +349,7 @@ void set_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
 }
 
 void set_col_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *PARAM_1_ADDR = 0;
     *PARAM_2_ADDR = offset_0;
     *TPU_CMD = SET_COL_IDX;
@@ -385,8 +388,23 @@ void set_col_idx_cmd(int offset_0, int offset_1, int offset_2, int offset_3) {
 }
 
 void reset_preload_cmd() {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *PARAM_1_ADDR = 0;
+    *PARAM_2_ADDR = 0;
+    *TPU_CMD = SET_PRELOAD;
+    __asm__ volatile ("nop");
+
+    // set_gemm_core_sel_cmd(2);
+    // *PARAM_1_ADDR = 0;
+    // *PARAM_2_ADDR = 0;
+    // *TPU_CMD = SET_PRELOAD;
+    set_gemm_core_sel_cmd(1);
+    __asm__ volatile ("nop");
+}
+
+void set_preload_cmd() {
+    set_gemm_core_sel_cmd(15);
+    *PARAM_1_ADDR = 1;
     *PARAM_2_ADDR = 0;
     *TPU_CMD = SET_PRELOAD;
     __asm__ volatile ("nop");
@@ -716,7 +734,7 @@ void set_mode_cmd(int mode, int length) {
 }
 
 void set_relu_cmd() {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *PARAM_1_ADDR = 1;
     *TPU_CMD = SET_RELU;
     __asm__ volatile ("nop");
@@ -731,7 +749,7 @@ void set_relu_cmd() {
 }
 
 void reset_relu_cmd() {
-    set_gemm_core_sel_cmd(3);
+    set_gemm_core_sel_cmd(15);
     *PARAM_1_ADDR = 0;
     *TPU_CMD = SET_RELU;
     __asm__ volatile ("nop");
@@ -840,6 +858,17 @@ void wait_idle_2_quick_cmd() {
 
 }
 
+void wait_idle_3_quick_cmd() {
+    while((*BUSY_ADDR_3));
+    __asm__ volatile ("nop");
+}
+
+void wait_idle_4_quick_cmd() {
+    while((*BUSY_ADDR_4));
+    __asm__ volatile ("nop");
+
+}
+
 
 void set_read_offset_cmd(int val) {
     *READ_OFFSET = val;
@@ -862,6 +891,8 @@ void read_conv_weight_cmd(int length, int depth, uint32_t addr) {
     trigger_dram_read_cmd();
     wait_idle_quick_cmd();
     wait_idle_2_quick_cmd();
+    wait_idle_3_quick_cmd();
+    wait_idle_4_quick_cmd();
     wait_idle_cmd();
 
 }
@@ -888,6 +919,8 @@ void read_batchNorm_weight_cmd(int length, uint32_t addr_1, uint32_t addr_2) {
     trigger_dram_read_cmd();
     wait_idle_quick_cmd();
     wait_idle_2_quick_cmd();
+    wait_idle_3_quick_cmd();
+    wait_idle_4_quick_cmd();
     // wait_idle_cmd();
     idle_5_cycle_cmd();
     
@@ -898,6 +931,8 @@ void read_batchNorm_weight_cmd(int length, uint32_t addr_1, uint32_t addr_2) {
     trigger_dram_read_cmd();
     wait_idle_quick_cmd();
     wait_idle_2_quick_cmd();
+    wait_idle_3_quick_cmd();
+    wait_idle_4_quick_cmd();
     wait_idle_cmd();
 }
 

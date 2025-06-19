@@ -75,7 +75,7 @@ state_t write_dram_curr_state;
 state_t write_dram_next_state;
 
 // 0xC4000000
-logic [1 : 0] gemm_core_sel; // 0: gemm core 0, 1: gemm core 1
+logic [GEMM_NUM : 0] gemm_core_sel; // 0: gemm core 0, 1: gemm core 1
 (* mark_debug="true" *) logic                        tpu_cmd_valid;     // tpu valid
 (* mark_debug="true" *) logic   [ACLEN-1 : 0]        tpu_cmd;
 logic  [DATA_WIDTH-1 : 0] S_DEVICE_data_i_t;
@@ -87,17 +87,29 @@ assign S_DEVICE_data_i_t = S_DEVICE_data_i;
 
 logic                      ret_valid;
 logic                      ret_valid_2;
+logic                      ret_valid_3;
+logic                      ret_valid_4;
 logic   [DATA_WIDTH-1 : 0] ret_data_out;
 logic   [DATA_WIDTH-1 : 0] ret_data_out_2;
+logic   [DATA_WIDTH-1 : 0] ret_data_out_3;
+logic   [DATA_WIDTH-1 : 0] ret_data_out_4;
 logic   [DATA_WIDTH-1 : 0] ret_max_pooling;
 logic   [DATA_WIDTH-1 : 0] ret_max_pooling_2;
+logic   [DATA_WIDTH-1 : 0] ret_max_pooling_3;
+logic   [DATA_WIDTH-1 : 0] ret_max_pooling_4;
 logic   [DATA_WIDTH-1 : 0] ret_avg_pooling;
 logic   [DATA_WIDTH-1 : 0] ret_avg_pooling_2;
+logic   [DATA_WIDTH-1 : 0] ret_avg_pooling_3;
+logic   [DATA_WIDTH-1 : 0] ret_avg_pooling_4;
 logic   [DATA_WIDTH-1 : 0] ret_softmax_result;
 logic   [DATA_WIDTH-1 : 0] ret_softmax_result_2;
+logic   [DATA_WIDTH-1 : 0] ret_softmax_result_3;
+logic   [DATA_WIDTH-1 : 0] ret_softmax_result_4;
 // 0xC400000A
 (* mark_debug="true" *) logic                      tpu_busy;     // 0->idle, 1->busy
 (* mark_debug="true" *) logic                      tpu_busy_2;     // 0->idle, 1->busy
+(* mark_debug="true" *) logic                      tpu_busy_3;     // 0->idle, 1->busy
+(* mark_debug="true" *) logic                      tpu_busy_4;     // 0->idle, 1->busy
 // 0xC4000010
 logic   [DATA_WIDTH-1 : 0] ret_data_out_reg;
 
@@ -192,6 +204,8 @@ logic [7 : 0] num_lans;//, send_lans_cnt;
 logic [DATA_WIDTH*4-1 : 0] P_data_out_r [0 : 3];
 logic [DATA_WIDTH*4-1 : 0] P_data_out   [0 : 3];
 logic [DATA_WIDTH*4-1 : 0] P_data_out_2 [0 : 3];
+logic [DATA_WIDTH*4-1 : 0] P_data_out_3 [0 : 3];
+logic [DATA_WIDTH*4-1 : 0] P_data_out_4 [0 : 3];
 
 /*
  * SOFTWARE READ / WRITE DATA
@@ -281,6 +295,18 @@ always_ff @( posedge clk_i ) begin
     end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == BUSY_ADDR_2) begin
         S_DEVICE_data_o  <= tpu_busy_2 || 
+                            (send_req_curr_state   != IDLE_S) ||
+                            (write_data_curr_state != IDLE_S) ||
+                            (write_dram_curr_state != IDLE_S);
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == BUSY_ADDR_3) begin
+        S_DEVICE_data_o  <= tpu_busy_3 || 
+                            (send_req_curr_state   != IDLE_S) ||
+                            (write_data_curr_state != IDLE_S) ||
+                            (write_dram_curr_state != IDLE_S);
+    end
+    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == BUSY_ADDR_4) begin
+        S_DEVICE_data_o  <= tpu_busy_4 || 
                             (send_req_curr_state   != IDLE_S) ||
                             (write_data_curr_state != IDLE_S) ||
                             (write_dram_curr_state != IDLE_S);
@@ -502,6 +528,84 @@ t2 (
     .gbuff_data_out_3(gbuff_data_out[3]),
 
     .tpu_busy(tpu_busy_2)     
+);
+
+TPU #(
+    .ACLEN(ACLEN),
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_WIDTH(DATA_WIDTH)
+) 
+t3 (
+    .clk_i(clk_i), .rst_i(rst_i),
+    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[2]),     // tpu valid
+    .tpu_cmd(tpu_cmd),           // tpu
+    .tpu_param_1_in(tpu_param_1_in),    // data 1
+    .tpu_param_2_in(tpu_param_2_in),     // data 2
+    
+    .tpu_data_1_in(tpu_data_1_in),
+    .tpu_data_2_in(tpu_data_2_in),
+    .tpu_data_3_in(tpu_data_3_in),
+    .tpu_data_4_in(tpu_data_4_in),
+
+    .tpu_data_1_out(P_data_out_3[0]),
+    .tpu_data_2_out(P_data_out_3[1]),
+    .tpu_data_3_out(P_data_out_3[2]),
+    .tpu_data_4_out(P_data_out_3[3]),
+    
+    .ret_valid(ret_valid_3),
+    .ret_data_out(ret_data_out_3),
+    .ret_max_pooling(ret_max_pooling_3),
+    .ret_avg_pooling(ret_avg_pooling_3),
+    .ret_softmax_result(ret_softmax_result_3),
+
+    // first dual port sram control signal
+    .gbuff_data_out_0(gbuff_data_out[0]),
+    .gbuff_data_out_1(gbuff_data_out[1]),
+
+    // second dual port sram control signal
+    .gbuff_data_out_2(gbuff_data_out[2]),
+    .gbuff_data_out_3(gbuff_data_out[3]),
+
+    .tpu_busy(tpu_busy_3)     
+);
+
+TPU #(
+    .ACLEN(ACLEN),
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_WIDTH(DATA_WIDTH)
+) 
+t4 (
+    .clk_i(clk_i), .rst_i(rst_i),
+    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[3]),     // tpu valid
+    .tpu_cmd(tpu_cmd),           // tpu
+    .tpu_param_1_in(tpu_param_1_in),    // data 1
+    .tpu_param_2_in(tpu_param_2_in),     // data 2
+    
+    .tpu_data_1_in(tpu_data_1_in),
+    .tpu_data_2_in(tpu_data_2_in),
+    .tpu_data_3_in(tpu_data_3_in),
+    .tpu_data_4_in(tpu_data_4_in),
+
+    .tpu_data_1_out(P_data_out_4[0]),
+    .tpu_data_2_out(P_data_out_4[1]),
+    .tpu_data_3_out(P_data_out_4[2]),
+    .tpu_data_4_out(P_data_out_4[3]),
+    
+    .ret_valid(ret_valid_4),
+    .ret_data_out(ret_data_out_4),
+    .ret_max_pooling(ret_max_pooling_4),
+    .ret_avg_pooling(ret_avg_pooling_4),
+    .ret_softmax_result(ret_softmax_result_4),
+
+    // first dual port sram control signal
+    .gbuff_data_out_0(gbuff_data_out[0]),
+    .gbuff_data_out_1(gbuff_data_out[1]),
+
+    // second dual port sram control signal
+    .gbuff_data_out_2(gbuff_data_out[2]),
+    .gbuff_data_out_3(gbuff_data_out[3]),
+
+    .tpu_busy(tpu_busy_4)     
 );
 
 /*
@@ -922,9 +1026,9 @@ always_comb begin
             else 
                 write_dram_next_state = IDLE_S;
     COLLECT_OUTPUT_S: write_dram_next_state = WAIT_GEMM_DATA_S;
-    WAIT_GEMM_DATA_S: if((ret_valid || ret_valid_2) && (dram_addr_offset*4 + 4) >= dram_write_length)
+    WAIT_GEMM_DATA_S: if((ret_valid || ret_valid_2 || ret_valid_3 || ret_valid_4) && (dram_addr_offset*4 + 4) >= dram_write_length)
                         write_dram_next_state = WAIT_FIFO_ADDR_S;
-                      else if((ret_valid || ret_valid_2))
+                      else if((ret_valid || ret_valid_2 || ret_valid_3 || ret_valid_4))
                         write_dram_next_state = COLLECT_OUTPUT_S;
                       else 
                         write_dram_next_state = WAIT_GEMM_DATA_S;
@@ -958,7 +1062,7 @@ always_ff @( posedge clk_i ) begin
     if(rst_i) begin
         output_recv_cnt <= 0;
     end
-    else if(write_dram_curr_state == WAIT_GEMM_DATA_S && (ret_valid || ret_valid_2)) begin
+    else if(write_dram_curr_state == WAIT_GEMM_DATA_S && (ret_valid || ret_valid_2  || ret_valid_3 || ret_valid_4)) begin
         output_recv_cnt <= output_recv_cnt + 1;
     end
     else if (S_DEVICE_strobe_i && S_DEVICE_addr_i == OUTPUT_RECV_CNT_ADDR ) begin
@@ -974,7 +1078,7 @@ always_ff @( posedge clk_i ) begin
     else if(write_dram_curr_state == IDLE_S) begin
         dram_addr_offset <= 0;
     end
-    else if(write_dram_curr_state == WAIT_GEMM_DATA_S && (ret_valid || ret_valid_2)) begin
+    else if(write_dram_curr_state == WAIT_GEMM_DATA_S && (ret_valid || ret_valid_2  || ret_valid_3 || ret_valid_4)) begin
         dram_addr_offset <= dram_addr_offset + 1;
     end
 end
@@ -1064,13 +1168,19 @@ end
 always_ff @( posedge clk_i ) begin
     // for(int i = 0; i < 4; i++) begin
         for(int j = 0; j < 4; j++) begin
-            if(write_dram_curr_state == WAIT_GEMM_DATA_S && (ret_valid || ret_valid_2)) begin
+            if(write_dram_curr_state == WAIT_GEMM_DATA_S && (ret_valid || ret_valid_2  || ret_valid_3 || ret_valid_4)) begin
                 // dram_data_r[i][output_recv_cnt*4 + j] <= P_data_out[i][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
                 if(gemm_core_sel[0]) begin
                     dram_data_r[dram_addr_offset*4 + j] <= P_data_out[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
                 end
                 else if(gemm_core_sel[1]) begin
                     dram_data_r[dram_addr_offset*4 + j] <= P_data_out_2[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+                end
+                else if(gemm_core_sel[2]) begin
+                    dram_data_r[dram_addr_offset*4 + j] <= P_data_out_3[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+                end
+                else if(gemm_core_sel[3]) begin
+                    dram_data_r[dram_addr_offset*4 + j] <= P_data_out_4[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
                 end
             end
         end

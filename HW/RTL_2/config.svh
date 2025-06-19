@@ -48,6 +48,9 @@ localparam INPUTHEIGHT = 32'hC4002088;
 
 localparam BOUNDARYPADDINGSIZE = 32'hC400208C;
 
+localparam BUSY_ADDR_3        = 32'hC4002090;
+localparam BUSY_ADDR_4        = 32'hC4002094;
+
 
 
 localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,

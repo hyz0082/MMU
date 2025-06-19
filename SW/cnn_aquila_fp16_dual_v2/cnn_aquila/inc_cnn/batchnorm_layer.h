@@ -494,6 +494,9 @@ layer_base * new_batchnorm_layer(
         my_float_t add = _gamma(ret, ch) * (- _mean(ret, ch)) * _invstd(ret, ch) + _beta(ret, ch);
         ret->base._W[(ret->in_.depth_ * 0) + ch] = mul;
         ret->base._W[(ret->in_.depth_ * 1) + ch] = add;
+
+        // write_dram_value_cmd(&ret->base._W[(ret->in_.depth_ * 0) + ch], mul);
+        // write_dram_value_cmd(&ret->base._W[(ret->in_.depth_ * 1) + ch], add);
     }
 
     for(int ch = 0; ch < channels; ch++) {
