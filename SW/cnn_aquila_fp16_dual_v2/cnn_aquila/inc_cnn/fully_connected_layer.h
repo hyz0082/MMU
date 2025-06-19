@@ -49,11 +49,7 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
 
     // malloc a_ptr
     entry->base.a_ptr_ = (my_float_t *)malloc(entry->base.out_size_ * sizeof(my_float_t));
-    if (entry->base.a_ptr_ != NULL) { // Check if memory was allocated
-        // memset((void*)entry->base.a_ptr_, 0, entry->base.out_size_ * sizeof(my_float_t));
-        // for(int i = 0; i < entry->base.out_size_; i++) {
-        //     write_dram_value_cmd(&entry->base.a_ptr_[i], 0);
-        // }
+    if (entry->base.a_ptr_ != NULL) {
     }
     else {
         printf("Error: Unable to allocate memory for entry->base.a_ptr_\n");
@@ -62,11 +58,7 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
 
     if (entry->base.need_space_for_a){
         entry->base.out_ptr_ = (my_float_t *)malloc(entry->base.out_size_ * sizeof(my_float_t));
-        if (entry->base.out_ptr_ != NULL) { // Check if memory was allocated
-            // memset((void*)entry->base.out_ptr_, 0, entry->base.out_size_ * sizeof(my_float_t));
-            // for(int i = 0; i < entry->base.out_size_; i++) {
-            //     write_dram_value_cmd(&entry->base.out_ptr_[i], 0);
-            // }
+        if (entry->base.out_ptr_ != NULL) {
         }
         else {
             printf("Error: Unable to allocate memory for entry->base.out_ptr_\n");
@@ -92,7 +84,7 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
     printf("start fc\n");
     reset_cmd();
     int kernel_len = entry->base.in_size_;
-    int weight_gbuff_size = 8192;//32000; //32768
+    int weight_gbuff_size = 8192;
     int weight_num = weight_gbuff_size / kernel_len;
 
     set_KMN_cmd(kernel_len , 4, weight_num);
@@ -117,11 +109,6 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
     }
 
     reset_relu_cmd();
-    // send data
-    // for (int c = 0; c < entry->base.in_size_; c++) {
-    //     // send_data_cmd(in[c], c);
-    //     send_data_cmd(read_dram_value_cmd(&in[c]), c);
-    // }
 
     my_float_t *pi = in;
     reset_sram_offset_cmd();
@@ -137,20 +124,6 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         wait_idle_quick_cmd();
         pi += 100;
     }
-
-    /*
-     * HW SEND INPUT
-     */
-    // reset_sram_offset_cmd();
-    // set_length_cmd(entry->base.in_size_);
-    // set_dram_read_input_cmd();
-    
-    // my_float_t *pi = in;
-    // uint32_t tmp_s;
-    // memcpy(&tmp_s, &pi, sizeof(tmp_s));
-    // set_addr_cmd(tmp_s);
-    // trigger_dram_read_cmd();
-    // wait_idle_cmd();
     
     my_float_t cur_max = -9999;//read_dram_value_cmd(&a[0]);
 
@@ -159,18 +132,8 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         // send weight_num weight
         int remain_len = min(weight_num, end - i);
         int send_weight_cnt = 0;
-        /*
-         * SW send weight
-         */
-        // for(int oc = 0; oc < remain_len; oc++) {
-        //     for (int c = 0; c < entry->base.in_size_; c++) {
-        //         // send_weight_cmd(W[(i+oc)*entry->base.in_size_ + c], send_weight_cnt++);
-        //         send_weight_cmd(read_dram_value_cmd(&W[(i+oc)*entry->base.in_size_ + c]), send_weight_cnt++);
-        //     }
-        // }
-        /*
-         * HW SEND WRIGHT
-         */
+        
+        // read weight
         set_dram_read_weight_cmd();
         reset_sram_offset_cmd();
         set_length_cmd(entry->base.in_size_);
@@ -202,13 +165,10 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         __asm__ volatile ("nop");
         __asm__ volatile ("nop");
         trigger_conv_cmd();
-        // wait_idle_cmd();
         wait_idle_quick_cmd();
         int var[4] = {0, 4, 8, 12};
         for(int m = 0; m < remain_len; m++) {
             static int fc_num = 0;
-            // a[i+m] = read_data_cmd(var[m%4], m/4);
-            // write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
             printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
             if (entry->has_bias_) {
                     my_float_t tmp_a = read_data_cmd(var[m%4], m/4) + read_dram_value_cmd(&b[i+m]);
@@ -219,49 +179,18 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
                 write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
             }
         }
-        
-
-        // if (entry->has_bias_) {
-        //     for(int m = 0; m < remain_len; m++) {
-        //         // a[i+m] += b[i+m];
-        //         my_float_t tmp_a = read_dram_value_cmd(&a[i+m]) + read_dram_value_cmd(&b[i+m]);
-        //         write_dram_value_cmd(&a[i+m], tmp_a);
-        //     }
-        // } 
     }
 
-    // commit
-    // for (int i = start; i < end; i++) {
-    //     // printf("[%d] %f\n", (int)i, (float_t)a[i]);
-    //     out[i] = entry->base.activate(a, i, entry->base.out_size_);
-    // }
-    // my_float_t cur_max = a[0];
-
-    // my_float_t cur_max = read_dram_value_cmd(&a[0]);
-
-    // for (int i = start; i < end; i++) {
-    //     // cur_max = max(cur_max, a[i]);
-    //     cur_max = max(cur_max, read_dram_value_cmd(&a[i]));
-    // }
-
     for (int i = start; i < end; i++) {
-        // send_exp_acc_cmd(a[i] - cur_max);
         send_exp_acc_cmd(read_dram_value_cmd(&a[i]) - cur_max);
-        // wait_idle_cmd();
         wait_idle_quick_cmd();
     }
     for (int i = start; i < end; i++) {
-        // sf_calc_cmd(a[i] - cur_max);
         sf_calc_cmd(read_dram_value_cmd(&a[i]) - cur_max);
-        // wait_idle_cmd();
         wait_idle_quick_cmd();
-        // out[i] = read_sf_cmd();
         write_dram_value_cmd(&out[i], read_sf_cmd());
-        // printf("%d: %f\n", (int)i, (float)read_sf_cmd());
     }
-    // wait for other process done
-    // atomic_or(&entry->base.done_flag, 1LL << hart_id);
-    // while (entry->base.done_flag != entry->base.mask);
+
     free(in);
 
 #ifdef PRINT_LAYER

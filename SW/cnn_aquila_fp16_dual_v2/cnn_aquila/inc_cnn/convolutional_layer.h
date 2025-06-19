@@ -236,17 +236,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         exit(-1);
     }
 
-    // malloc input space
-    // entry->base.padded_ptr = (my_float_t *)malloc(entry->base.padding_size * sizeof(my_float_t));
-    // if (entry->base.padded_ptr != NULL) {
-    //     if(entry->weight_.width_ != 1) {
-    //         reset_dram_value_cmd(entry->base.padded_ptr, entry->base.padding_size);
-    //     }
-    // }
-    // else {
-    //     printf("Error: Unable to allocate memory for layer->padded_ptr\n");
-    //     exit(1);
-    // }
 
     // // malloc output space
     entry->base.a_ptr_ = (my_float_t *)malloc(entry->base.out_size_ * sizeof(my_float_t));
@@ -258,23 +247,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     }
 
     entry->base.out_ptr_ = entry->base.a_ptr_;
-    malloc_time += (clock() - tmp_tick)/ticks_per_msec;
-
-    tmp_tick = clock();
-    // if(entry->weight_.width_ != 1) {
-    //     conv_copy_and_pad_input(entry, hart_id, input);
-    // }
-    padding_time += (clock() - tmp_tick)/ticks_per_msec;
 
     my_float_t *in_ptr_prev = input->in_ptr_;
+    my_float_t *in = input->in_ptr_;
 
-    my_float_t *in;
-    // if(entry->weight_.width_ != 1) {
-    //     in = entry->base.padded_ptr;
-    // }
-    // else {
-        in = input->in_ptr_;
-    // }
+    // in = input->in_ptr_;
 
     my_float_t *a = entry->base.a_ptr_;
     my_float_t *W = weights + entry->base.weight_offset;
@@ -303,12 +280,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     int data_gbuff_size   = 32768;
     int weight_gbuff_size = 8192;
     int idx_gbuff_size    = 327680;
-    /*
-     * modify height_per_operation on each convolutional layer
-     */
-    /*
-     * weight
-     */
+
     int kernel_len = (in_.depth_) * (weight_.height_) * (weight_.width_);
     int weight_num;
     /*
