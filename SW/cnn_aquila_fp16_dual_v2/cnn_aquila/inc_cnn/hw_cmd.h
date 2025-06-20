@@ -124,20 +124,6 @@ volatile my_float_t * TPU_DATA_ADDR[16] = {(my_float_t*)0xC4001000,
                                         (my_float_t*)0xC4001F00, 
                                     };
 
-// localparam [31:0] TPU_DATA_ADDR [0:15] = {32'hC4001000, 32'hC4001100, 32'hC4001200, 32'hC4001300,
-//     32'hC4001400, 32'hC4001500, 32'hC4001600, 32'hC4001700,
-//     32'hC4001800, 32'hC4001900, 32'hC4001A00, 32'hC4001B00,
-//     32'hC4001C00, 32'hC4001D00, 32'hC4001E00, 32'hC4001F00};
-
-// volatile unsigned int * p_dsa_cnt = (unsigned int *) DSA_CNT_ADDR;
-// volatile float * p_dsa_result = (float *) DSA_RESULT_ADDR;
-// volatile unsigned int * p_dsa_trigger = (unsigned int *) DSA_TRIGGER_ADDR;
-// volatile unsigned int * p_dsa_base = (unsigned int *) DSA_BASE_ADDR;
-// volatile unsigned int * p_dsa_top = (unsigned int *) DSA_TOP_ADDR;
-// volatile float * p_dsa_buff_1 = (float *) DSA_BUFF_1;
-// volatile float * p_dsa_buff_2 = (float *) DSA_BUFF_2;
-// volatile float * p_dsa_buff_3 = (float *) DSA_BUFF_3;
-// volatile float * p_dsa_weight[2] = {(float *) DSA_BUFF_2, (float *) DSA_BUFF_3};
 void idle_5_cycle_cmd() {
     __asm__ volatile ("nop");
     __asm__ volatile ("nop");
@@ -153,23 +139,6 @@ void set_gemm_core_sel_cmd(int sel) {
     __asm__ volatile ("nop");
     __asm__ volatile ("nop");
     __asm__ volatile ("nop");
-}
-
-static inline void send_bn_data(my_float_t data, int pos){
-    // uint32_t tmp;
-    // memcpy(&tmp, &data, sizeof(float_t));
-    *(TPU_DATA_ADDR[pos]) = data;//tmp;
-
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-}
-
-static inline void write_bn_data(int pos){
-    *PARAM_2_ADDR = pos;//pos;
-    *TPU_CMD = SW_WRITE_PARTIAL;
-    __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
 }
 
 void send_bn_mul_data(my_float_t data, int pos){
@@ -921,8 +890,8 @@ void read_batchNorm_weight_cmd(int length, uint32_t addr_1, uint32_t addr_2) {
     wait_idle_2_quick_cmd();
     wait_idle_3_quick_cmd();
     wait_idle_4_quick_cmd();
-    // wait_idle_cmd();
-    idle_5_cycle_cmd();
+    wait_idle_cmd();
+    // idle_5_cycle_cmd();
     
     // read batchNorm weight 2 
     set_dram_read_bn_add_weight_cmd();

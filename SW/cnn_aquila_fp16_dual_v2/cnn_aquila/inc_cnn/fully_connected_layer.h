@@ -120,12 +120,11 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         memcpy(&tmp_s, &pi, sizeof(tmp_s));
         set_addr_cmd(tmp_s);
         trigger_dram_read_cmd();
-        // wait_idle_cmd();
         wait_idle_quick_cmd();
         pi += 100;
     }
     
-    my_float_t cur_max = -9999;//read_dram_value_cmd(&a[0]);
+    my_float_t cur_max = -9999;
 
     for (int i = start; i < end; i += weight_num)
     {
@@ -143,7 +142,6 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
             memcpy(&tmp_s, &ppw, sizeof(tmp_s));
             set_addr_cmd(tmp_s);
             trigger_dram_read_cmd();
-            // wait_idle_cmd();
             wait_idle_quick_cmd();
         }
 
@@ -193,13 +191,6 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
 
     free(in);
 
-#ifdef PRINT_LAYER
-    if (hart_id == 0) 
-    {
-        // printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, out[0], out[1], out[entry->base.out_size_-2], out[entry->base.out_size_-1]);
-        // printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float_t)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-2]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
-    }
-#endif
 
 #ifdef USING_GEM5
     tick = (clock() - tick)/ticks_per_msec;
@@ -217,12 +208,7 @@ layer_base * new_fully_connected_layer(
                                        )
 {
 
-// #ifndef USING_GEM5
     fully_connected_layer *ret = (fully_connected_layer *)malloc(sizeof(fully_connected_layer));
-// #else
-//     fully_connected_layer *ret = (fully_connected_layer *) ctrl->nwk_cur_ptr;
-//     ctrl->nwk_cur_ptr += sizeof(fully_connected_layer);
-// #endif
     ctrl->padding_size = 0;
     init_layer(&ret->base,
                ctrl,

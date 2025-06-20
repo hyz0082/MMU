@@ -75,7 +75,7 @@ state_t write_dram_curr_state;
 state_t write_dram_next_state;
 
 // 0xC4000000
-logic [GEMM_NUM : 0] gemm_core_sel; // 0: gemm core 0, 1: gemm core 1
+logic [15 : 0] gemm_core_sel;
 (* mark_debug="true" *) logic                        tpu_cmd_valid;     // tpu valid
 (* mark_debug="true" *) logic   [ACLEN-1 : 0]        tpu_cmd;
 logic  [DATA_WIDTH-1 : 0] S_DEVICE_data_i_t;
@@ -262,8 +262,17 @@ always_ff @( posedge clk_i ) begin
 end
 
 always_ff @( posedge clk_i ) begin
-    if(ret_valid[0]) begin
+    if     (ret_valid[0] && gemm_core_sel[0]) begin
         ret_data_out_reg <= ret_data_out[0];
+    end
+    else if(ret_valid[1] && gemm_core_sel[1]) begin
+        ret_data_out_reg <= ret_data_out[1];
+    end
+    else if(ret_valid[2] && gemm_core_sel[2]) begin
+        ret_data_out_reg <= ret_data_out[2];
+    end
+    else if(ret_valid[3] && gemm_core_sel[3]) begin
+        ret_data_out_reg <= ret_data_out[3];
     end
 end
 
@@ -1123,9 +1132,6 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-// ERROR
-//dram_write_length_cnt NEED RESET
-
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
         // send_lans_cnt <= 0;
@@ -1136,60 +1142,49 @@ always_ff @( posedge clk_i ) begin
         dram_write_length_cnt <= 0;
     end
     else if (write_dram_curr_state == SEND_REQ_S) begin   
-        // if(dram_write_length_cnt + (dram_write_addr_offset >> 1) >= dram_write_length) begin
-        //     dram_write_length_cnt <= 0;
-        //     // send_lans_cnt <= send_lans_cnt + 1;
-        // end
-        // else begin
-            // ??
-            dram_write_length_cnt <= dram_write_length_cnt + 
-                                 (dram_write_addr_offset >> 1);
-        // end
-        
+        dram_write_length_cnt <= dram_write_length_cnt + 
+                                (dram_write_addr_offset >> 1);
     end
 end
 
 always_comb begin
-    if     (gemm_core_sel[0]) GeMMOutputSel = 0;
-    else if(gemm_core_sel[1]) GeMMOutputSel = 1;
-    else if(gemm_core_sel[2]) GeMMOutputSel = 2;
-    else if(gemm_core_sel[3]) GeMMOutputSel = 3;
-    else                      GeMMOutputSel = 0;
+    if     (gemm_core_sel[ 0]) GeMMOutputSel = 0;
+    else if(gemm_core_sel[ 1]) GeMMOutputSel = 1;
+    else if(gemm_core_sel[ 2]) GeMMOutputSel = 2;
+    else if(gemm_core_sel[ 3]) GeMMOutputSel = 3;
+    else if(gemm_core_sel[ 4]) GeMMOutputSel = 4;
+    else if(gemm_core_sel[ 5]) GeMMOutputSel = 5;
+    else if(gemm_core_sel[ 6]) GeMMOutputSel = 6;
+    else if(gemm_core_sel[ 7]) GeMMOutputSel = 7;
+    else if(gemm_core_sel[ 8]) GeMMOutputSel = 8;
+    else if(gemm_core_sel[ 9]) GeMMOutputSel = 9;
+    else if(gemm_core_sel[10]) GeMMOutputSel = 10;
+    else if(gemm_core_sel[11]) GeMMOutputSel = 11;
+    else if(gemm_core_sel[12]) GeMMOutputSel = 12;
+    else if(gemm_core_sel[13]) GeMMOutputSel = 13;
+    else if(gemm_core_sel[14]) GeMMOutputSel = 14;
+    else if(gemm_core_sel[15]) GeMMOutputSel = 15;
+    else                       GeMMOutputSel = 0;
 end
 
 
 always_ff @( posedge clk_i ) begin
-    // for(int i = 0; i < 4; i++) begin
-        for(int j = 0; j < 4; j++) begin
-            if(write_dram_curr_state == WAIT_GEMM_DATA_S && ( |ret_valid )) begin
-                // dram_data_r[i][output_recv_cnt*4 + j] <= P_data_out[i][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                if     (num_lans == 0) begin
-                    dram_data_r[dram_addr_offset*4 + j] <= P_data_out_1[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                end
-                else if(num_lans == 1) begin
-                    dram_data_r[dram_addr_offset*4 + j] <= P_data_out_2[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                end
-                else if(num_lans == 2) begin
-                    dram_data_r[dram_addr_offset*4 + j] <= P_data_out_3[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                end
-                else if(num_lans == 3) begin
-                    dram_data_r[dram_addr_offset*4 + j] <= P_data_out_4[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                end
-                // if(gemm_core_sel[0]) begin
-                //     dram_data_r[dram_addr_offset*4 + j] <= P_data_out_1[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                // end
-                // else if(gemm_core_sel[1]) begin
-                //     dram_data_r[dram_addr_offset*4 + j] <= P_data_out_2[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                // end
-                // else if(gemm_core_sel[2]) begin
-                //     dram_data_r[dram_addr_offset*4 + j] <= P_data_out_3[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                // end
-                // else if(gemm_core_sel[3]) begin
-                //     dram_data_r[dram_addr_offset*4 + j] <= P_data_out_4[num_lans][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
-                // end
+    for(int j = 0; j < 4; j++) begin
+        if(write_dram_curr_state == WAIT_GEMM_DATA_S && ( |ret_valid )) begin
+            if     (num_lans == 0) begin
+                dram_data_r[dram_addr_offset*4 + j] <= P_data_out_1[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+            end
+            else if(num_lans == 1) begin
+                dram_data_r[dram_addr_offset*4 + j] <= P_data_out_2[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+            end
+            else if(num_lans == 2) begin
+                dram_data_r[dram_addr_offset*4 + j] <= P_data_out_3[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
+            end
+            else if(num_lans == 3) begin
+                dram_data_r[dram_addr_offset*4 + j] <= P_data_out_4[GeMMOutputSel][(DATA_WIDTH*(4-j)-1)-:DATA_WIDTH];
             end
         end
-    // end
+    end
 end
 
 logic [4:0] v = dram_write_addr[num_lans][5:1];

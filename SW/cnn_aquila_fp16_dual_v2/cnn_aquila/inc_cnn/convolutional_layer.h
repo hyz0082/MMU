@@ -79,138 +79,6 @@ static int conv_out_dim(int in_width, int in_height, int window_width,  int wind
     return conv_out_length(in_width, window_width, w_padding, w_stride, pad_type) * conv_out_length(in_height, window_height, h_padding, h_stride, pad_type);
 }
 
-void conv_copy_and_pad_input(convolutional_layer *entry, unsigned int hart_id, input_struct *input)
-{   
-    static int conv_copy_cnt = 0;
-
-    if (entry->pad_type_ == same && conv_copy_cnt == 0)
-    {
-        send_bn_mul_data(1, 0);
-        send_bn_add_data(0, 0);
-        // set_length_cmd(remain_len);
-        set_dram_read_input_cmd();
-        reset_relu_cmd();
-        set_num_lans_cmd(0);
-        index3d in_ = entry->in_;
-        index3d in_padded_ = entry->in_padded_;
-        index3d padding_ = entry->padding_;
-        my_float_t *in = input->in_ptr_;
-        my_float_t *dst = entry->base.padded_ptr;
-        
-        int total_size = in_.depth_ * in_.height_;
-        int start = 0;
-        int end = total_size;
-        
-        for (int i = start; i < end; i++)
-        {
-            int c = i / in_.height_;
-            int y = i % in_.height_;
-            my_float_t *pimg = &dst[get_index(&in_padded_, padding_.width_, padding_.height_ + y, c)]; 
-            my_float_t *pin = &in[get_index(&in_, 0, y, c)];
-
-            int max_len = 112;
-            for (int j = 0; j < in_.width_; j += max_len) {
-                int remain_len = min(max_len, in_.width_ - j);
-                /*
-                * send data
-                */
-                reset_sram_offset_cmd();
-                set_length_cmd(remain_len);
-                // set_dram_read_input_cmd();
-                uint32_t tmp_s;
-                memcpy(&tmp_s, &pin, sizeof(tmp_s));
-                set_addr_cmd(tmp_s);
-                trigger_dram_read_cmd();
-                // wait_idle_cmd();
-                wait_idle_quick_cmd();
-                /*
-                 * move data from input sram to output sram
-                 */
-                set_mode_cmd(1, remain_len);
-                // reset_relu_cmd();
-                trigger_add_cmd();
-                // wait_idle_cmd();
-                wait_idle_quick_cmd();
-                set_mode_cmd(0, 0);
- 
-                /*
-                * write data
-                */
-                set_dram_write_lens_cmd(remain_len);
-                // set_num_lans_cmd(0);
-                set_output_recv_cnt_cmd(0);
-                memcpy(&tmp_s, &pimg, sizeof(tmp_s));
-                set_dram_write_addr_cmd(0, tmp_s);
-                set_dram_w_tr_cmd();
-                // wait_idle_cmd();
-                // 0.1s
-                wait_idle_quick_cmd();
-
-                pin += remain_len;
-                pimg += remain_len; 
-            }
-            
-        }
-    }
-    else {
-        send_bn_mul_data(1, 0);
-        send_bn_add_data(0, 0);
-        set_dram_read_input_cmd();
-        reset_relu_cmd();
-        set_num_lans_cmd(0);
-        index3d in_ = entry->in_;
-        index3d in_padded_ = entry->in_padded_;
-        index3d padding_ = entry->padding_;
-        my_float_t *in = input->in_ptr_;
-        my_float_t *dst = entry->base.padded_ptr;
-        
-        int total_size = in_.depth_ * in_.height_;
-        int start = 0;
-        int end = total_size;
-        
-        for (int i = start; i < end; i++)
-        {
-            int c = i / in_.height_;
-            int y = i % in_.height_;
-            my_float_t *pimg = &dst[get_index(&in_padded_, padding_.width_, padding_.height_ + y, c)]; 
-            // my_float_t *pin = &in[get_index(&in_, 0, y, c)];
-            my_float_t *pin = in + ((in_.height_ * c + y) * in_.width_);
-
-            int remain_len = in_.width_;
-            /*
-             * send data
-             */
-            reset_sram_offset_cmd();
-            set_length_cmd(remain_len);
-            uint32_t tmp_s;
-            memcpy(&tmp_s, &pin, sizeof(tmp_s));
-            set_addr_cmd(tmp_s);
-            trigger_dram_read_cmd();
-            wait_idle_quick_cmd();
-            /*
-             * move data from input sram to output sram
-             */
-            set_mode_cmd(1, remain_len);
-            trigger_add_cmd();
-            wait_idle_quick_cmd();
-            set_mode_cmd(0, 0);
-            /*
-            * write data
-            */
-            set_dram_write_lens_cmd(remain_len);
-            set_output_recv_cnt_cmd(0);
-            memcpy(&tmp_s, &pimg, sizeof(tmp_s));
-            set_dram_write_addr_cmd(0, tmp_s);
-            set_dram_w_tr_cmd();
-            wait_idle_cmd();
-            // 0.1s
-            // wait_idle_quick_cmd();
-        }
-    }
-
-    conv_copy_cnt++;
-}
-
 void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int hart_id, input_struct *input)
 {
 
@@ -579,10 +447,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
          * configuration for read input
          */
         set_gemm_core_sel_cmd(15);
-        // set_length_cmd(896);
-        // set_input_height_cmd(4);
-        // set_boundary_padding_size_cmd(696);
-        // set_dram_read_input_cmd();
         set_gemm_core_sel_cmd(1);
 
         int num_lans_get = 1;
@@ -599,8 +463,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         for(int h = 0; h < out_.height_; h += 1) {
 
-            // int remain_num = 1;
-            
             // read input
             tmp_tick = clock();
             set_gemm_core_sel_cmd(15);
@@ -794,6 +656,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             set_dram_read_weight_cmd();
         }
 
+        // read third conv weight
         if(third_core_en)
         {
             set_gemm_core_sel_cmd(4);
@@ -806,18 +669,17 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             wait_idle_3_quick_cmd();
             
             // read third batchNorm weight
-            // tmp_tick_2 = clock();
             batchNormIndex = 0;
             ppw = batchNorm_W + o_3;
             memcpy(&tmp_s, &ppw, sizeof(tmp_s));
             ppw = batchNorm_W + out_.depth_ + o_3;
             memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
-            // ???
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_3_quick_cmd();
             set_dram_read_weight_cmd();
         }
 
+        // read fourth conv weight
         if(fourth_core_en)
         {
             set_gemm_core_sel_cmd(8);
@@ -830,13 +692,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             wait_idle_4_quick_cmd();
             
             // read fourth batchNorm weight
-            // tmp_tick_2 = clock();
             batchNormIndex = 0;
             ppw = batchNorm_W + o_4;
             memcpy(&tmp_s, &ppw, sizeof(tmp_s));
             ppw = batchNorm_W + out_.depth_ + o_4;
             memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
-            // ???
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_4_quick_cmd();
             set_dram_read_weight_cmd();
@@ -886,9 +746,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             else {
                 set_currinputtype_cmd(1);
                 set_sram_offset_cmd(paddingSize);
-
-                // set_length_cmd(((currHeightEnd - curr_h + 1)) * in_.width_);
-                // set_input_height_cmd(((currHeightEnd - curr_h + 1)));
                 set_length_cmd(h_per_op_hw * in_.width_);
                 set_input_height_cmd(h_per_op_hw);
                 set_boundary_padding_size_cmd(2);
@@ -909,6 +766,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
 
             tmp_tick = clock();
             
+            // trigger hardware compute
             trigger_conv_cmd();
             wait_idle_quick_cmd();
             wait_idle_2_quick_cmd();
@@ -936,7 +794,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             }
             
             wait_idle_cmd();
-            // output_offset += input_num;
 
             if(second_core_en)
             {
@@ -1096,7 +953,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             memcpy(&tmp_s, &ppw, sizeof(tmp_s));
             ppw = batchNorm_W + out_.depth_ + o_3;
             memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
-            // ???
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_3_quick_cmd();
             set_dram_read_weight_cmd();
@@ -1120,7 +976,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             memcpy(&tmp_s, &ppw, sizeof(tmp_s));
             ppw = batchNorm_W + out_.depth_ + o_4;
             memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
-            // ???
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_4_quick_cmd();
             set_dram_read_weight_cmd();
@@ -1128,9 +983,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         send_weight_time += (clock() - tmp_tick)/ticks_per_msec;
         
         int output_offset = 0;
-        /*
-         * CONGIF RACH READ LENGTH FROM DRAM
-         */
+        
+        //
         set_gemm_core_sel_cmd(15);
         set_dram_read_input_cmd();
         set_gemm_core_sel_cmd(1);
@@ -1369,10 +1223,7 @@ layer_base * new_convolutional_layer(
                                      uint8_t delete_input
                                     )
 {
-    // printf("get conv parameter\n");
-    // uint32_t tmp = in_width;
-    // printf("in_width: %d\n", tmp);
-    // printf("in_height: %u\n", in_height);
+
     convolutional_layer *ret = (convolutional_layer *)malloc(sizeof(convolutional_layer));
 
     if (pad_type == same)

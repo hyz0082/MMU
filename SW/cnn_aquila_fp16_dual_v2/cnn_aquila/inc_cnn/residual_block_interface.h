@@ -131,25 +131,22 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
     my_float_t *pj   = out1;
     my_float_t *pout = out0;
     // my_float_t *po = out;
-    int source = 1;// 0: sw, 1: hw
+    // int source = 1;// 0: sw, 1: hw
     /*
      * sw version
      */
-    if(!source)
-    for (int i = start; i < end; i++)
-    {
-        my_float_t tmp_s = read_dram_value_cmd(&out0[i]) + read_dram_value_cmd(&out1[i]);
-        if(tmp_s < (my_float_t)0) {
-            tmp_s = 0;
-        }
-        write_dram_value_cmd(&out[i], tmp_s);
-    }
-    /*
-     * hw version
-     */
-    // 112 is correct
+    // if(!source)
+    // for (int i = start; i < end; i++)
+    // {
+    //     my_float_t tmp_s = read_dram_value_cmd(&out0[i]) + read_dram_value_cmd(&out1[i]);
+    //     if(tmp_s < (my_float_t)0) {
+    //         tmp_s = 0;
+    //     }
+    //     write_dram_value_cmd(&out[i], tmp_s);
+    // }
+    
     int max_len = 100;
-    if(source && block_cnt != 15)
+    if(block_cnt != 15)
     for (int i = start; i < end; i += max_len)
     {
         int remain_len = min(max_len, end - i);
@@ -203,7 +200,7 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
         pj += remain_len;
         __asm__ volatile ("nop");
     }
-    else if(source && block_cnt == 15){
+    else if(block_cnt == 15){
         set_avg_pooling_cmd();
         max_len = 49;
         for (int i = start; i < end; i += max_len)
@@ -324,12 +321,13 @@ void residual_block_interface_forward_propagation(struct list_node *ptr, unsigne
     block_cnt++;
 #ifdef PRINT_LAYER
     // printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float)out[0], (float)out[1], (float)out[entry->base.out_size_-2], (float)out[entry->base.out_size_-1]);
-    printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float_t)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-2]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
+    // printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float_t)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-2]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
 #endif
 
 #ifdef USING_GEM5
     tick = (clock() - tick)/ticks_per_msec;
     printf("It took %ld msec to perform residual.\n\n", tick);
+    printf("[%s] done [%f, %f, ... , %f, %f]\n", entry->base.layer_name_, (float_t)read_dram_value_cmd(&out[0]), (float_t)read_dram_value_cmd(&out[1]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-2]), (float_t)read_dram_value_cmd(&out[entry->base.out_size_-1]));
 #endif
 }
 
