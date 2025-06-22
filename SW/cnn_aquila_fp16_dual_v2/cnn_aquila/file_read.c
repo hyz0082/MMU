@@ -101,11 +101,12 @@ my_float_t *read_weights(char *filename)
 
     size = read_file(filename, fbuf);
     printf("size = %d\n", size);
-    if ((weights = (my_float_t *) malloc(size+1024)) == NULL)
-    {
-        printf("read_weights(): Out of memory.\n");
-        exit (1);
-    }
+    // if ((weights = (my_float_t *) malloc(size+1024)) == NULL)
+    // {
+    //     printf("read_weights(): Out of memory.\n");
+    //     exit (1);
+    // }
+    weights = (my_float_t *) 0x85000000;
     my_float_t s;
     printf("size: %d\n", sizeof(s));
     // printf("weights[0]: %f\n", fbuf[0]);
@@ -122,3 +123,31 @@ my_float_t *read_weights(char *filename)
     return (my_float_t *) weights;
 }
 
+my_float_t *read_input(char *filename)
+{
+    int size;
+    my_float_t *weights;
+
+    size = read_file(filename, fbuf);
+    printf("size = %d\n", size);
+    // if ((weights = (my_float_t *) malloc(size+1024)) == NULL)
+    // {
+    //     printf("read_weights(): Out of memory.\n");
+    //     exit (1);
+    // }
+    weights = (my_float_t *) 0x84000000;
+    my_float_t s;
+    printf("size: %d\n", sizeof(s));
+    // printf("weights[0]: %f\n", fbuf[0]);
+    // float tmp;
+    // for(int i = 0; i < size/4; i++) {
+    //     memcpy((void *) &tmp, (void *) fbuf, sizeof(float));
+    //     // float tmp = fbuf[i];
+    //     weights[i] = tmp;
+    //     fbuf += 4;
+    // }
+    // float tmp2 = weights[0];
+    // printf("weights[0]: %f\n", tmp2);
+    memcpy((void *) weights, (void *) fbuf, size);
+    return (my_float_t *) weights;
+}

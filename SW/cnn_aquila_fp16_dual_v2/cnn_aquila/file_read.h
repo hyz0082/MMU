@@ -27,8 +27,10 @@
     float **read_images(char *filename, int *n_images, int *n_rows, int *n_cols, int padding);
     uint8_t *read_labels(char *filename);
     float *read_weights(char *filename);
+    float *read_input(char *filename);
 #else
     _Float16 **read_images(char *filename, int *n_images, int *n_rows, int *n_cols, int padding);
     uint8_t *read_labels(char *filename);
     _Float16 *read_weights(char *filename);
+    _Float16 *read_input(char *filename);
 #endif
