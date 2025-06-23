@@ -163,52 +163,6 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     int h_per_op_hw;
     int input_num, out_h_per_op_hw, out_w_per_op_hw;
 
-    // static int h_per_op_hw_arr[53] = {7, 1, 3, 1, //0~3
-    //                                   1, 1, 3, 1, //4~7
-    //                                   1, 3, 1, 1, //8~11
-    //                                   4, 1, 2, 2, //12~15
-    //                                   7, 1, 2, 7, //16~19
-    //                                   1, 2, 7, 1, //20~23
-    //                                   2, 4, 2, 2, //24~27
-    //                                   2, 8, 2, 2, //28~31
-    //                                   8, 2, 2, 8, //32~35
-    //                                   2, 2, 8, 2, //36~39
-    //                                   2, 8, 2, 2, //40~43
-    //                                   4, 7, 2, 2, //44~47
-    //                                   7, 7, 2, 7, //48~51
-    //                                   7};         //52
-
-
-    // static int input_num_arr[53] = {112, 56,  56,  56, //0~3
-    //                                  56, 56,  56,  56, //4~7
-    //                                  56, 56,  56,  56, //8~11
-    //                                  28, 28,  28,  56, //12~15
-    //                                 140, 28,  56, 140, //16~19
-    //                                  28, 56, 140,  28, //20~23
-    //                                  56, 14,  28,  14, //24~27
-    //                                  28, 84,  28,  28, //28~31
-    //                                  84, 28,  28,  84, //32~35
-    //                                  28, 28,  84,  28, //36~39
-    //                                  28, 84,  28,  28, //40~43
-    //                                   7, 49,   7,  14, //44~47
-    //                                  35, 49,  14,  35, //48~51
-    //                                  49};              //52
-
-    // static int weight_num_arr[53] = {  4,  64,  56,  73, //0~3
-    //                                   73,  64,  56,  73, //4~7
-    //                                   64,  56,  73,  73, //8~11
-    //                                   28, 146, 128,  64, //12~15
-    //                                   28, 146,  64,  28, //16~19
-    //                                  146,  64,  28, 146, //20~23
-    //                                   64,  14, 128,  64, //24~27
-    //                                   32,  14, 128,  32, //28~31
-    //                                   14, 128,  32,  14, //32~35
-    //                                  128,  32,  14, 128, //36~39
-    //                                   32,  14, 128,  32, //40~43
-    //                                    7,  64,  32,  16, //44~47
-    //                                    7,  64,  16,   7, //48~51
-    //                                   64};               //52
-
     static int h_per_op_hw_arr[53] = {7, 2, 3, 1, //0~3
                                       1, 1, 3, 1, //4~7
                                       1, 3, 1, 1, //8~11
@@ -240,35 +194,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                                      35, 49,  14,  35, //48~51
                                      49};              //52
 
-    // static int weight_num_arr[53] = {  4,  64,  32,  64, //0~3
-    //                                   64,  64,  32,  64, //4~7
-    //                                   64,  32,  64,  64, //8~11
-    //                                   16, 128, 128,  64, //12~15
-    //                                   16, 128,  64,  16, //16~19
-    //                                  128,  64,  16, 128, //20~23
-    //                                   64,   8, 128,  64, //24~27
-    //                                   32,   8, 128,  32, //28~31
-    //                                    8, 128,  32,   8, //32~35
-    //                                  128,  32,   8, 128, //36~39
-    //                                   32,   8, 128,  32, //40~43
-    //                                    2,  32,   4,   8, //44~47
-    //                                    2,  32,   4,   2, //48~51
-    //                                   64};               //52
 
-    // static int weight_num_arr[53] = {  4,  32,  16, 128, //0~3
-    //                                  128,  32,  16,  64, //4~7
-    //                                   32,  16,  64,  64, //8~11
-    //                                    8, 128,  64,  32, //12~15
-    //                                    8, 128,  32,   8, //16~19
-    //                                  128,  32,   8, 128, //20~23
-    //                                   32,   4,  64,  32, //24~27
-    //                                   16,   4,  64,  16, //28~31
-    //                                    4,  64,  16,   4, //32~35
-    //                                   64,  16,   4,  64, //36~39
-    //                                   16,   4,  64,  16, //40~43
-    //                                    4,  32,   16,   8, //44~47
-    //                                    4,  32,   8,   4, //48~51
-    //                                   32};               //52
     static int weight_num_arr[53] = {  4,  32,  16, 128, //0~3
                                      128,  32,  16,  64, //4~7
                                       32,  16,  64,  64, //8~11
@@ -317,11 +243,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     set_paddingsize_cmd(paddingSize);
     set_gemm_core_sel_cmd(1);
 
-    // printf("padding size: %d\n", paddingSize);
-
-    /*
-     * Index Ram Setting
-     */
+    // Index Ram Setting
     tmp_tick = clock();
     set_gemm_core_sel_cmd(15);
     int index_offset = 0;
@@ -379,7 +301,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     preprocess_time = (clock() - tick)/ticks_per_msec;
 
     if(conv_cnt == 0)
-    for (int o = start; o < end; o += weight_num)
+    for (int o = start; o < end; o += weight_num * 4)
     {
         // printf("[%s]: %d/%d\n", entry->base.layer_name_, (int)(o + 1), (int)end);
         
@@ -388,16 +310,27 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         // read weight from dram
         tmp_tick = clock();
         
-        int remain_oc_2;
-        int o_2;
+        int remain_oc_2, remain_oc_3, remain_oc_4;
+        int o_2, o_3, o_4;
         
-        int second_core_en = 0;
-        if(o + weight_num < end) {
-            second_core_en = 1;
-            // second_core_en = 0;
-            o_2 = o + weight_num;
-            remain_oc_2 = min(weight_num, end - o_2);
-        }
+        int second_core_en, third_core_en, fourth_core_en;
+
+        second_core_en = 1;
+        // second_core_en = 0;
+        o_2 = o + weight_num;
+        // remain_oc_2 = min(weight_num, end - o_2);
+
+        third_core_en = 1;
+        // third_core_en = 0;
+        o_3 = o_2 + weight_num;
+        remain_oc_3 = min(weight_num, end - o_3);
+
+        fourth_core_en = 1;
+        // fourth_core_en = 0;
+        o_4 = o_3 + weight_num;
+        remain_oc_4 = min(weight_num, end - o_4);
+
+
 
         // read weight from dram
         tmp_tick = clock();
@@ -428,7 +361,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             uint32_t tmp_s, tmp_s_2;
             memcpy(&tmp_s, &ppw, sizeof(tmp_s));
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
-                                remain_oc_2, tmp_s);
+                                remain_oc, tmp_s);
             
             // read batchNorm weight
             ppw = batchNorm_W + o_2;
@@ -438,16 +371,52 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             set_dram_read_weight_cmd();
         }
+
+        // third GeMM read data
+        if(third_core_en)
+        {
+            // read weight from dram
+            set_gemm_core_sel_cmd(4);
+            int offset_w = (weight_.height_ * (in_.depth_ * o_3)) * weight_.width_;
+            const my_float_t * ppw = W + offset_w;
+            uint32_t tmp_s, tmp_s_2;
+            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
+                                remain_oc_3, tmp_s);
+            
+            // read batchNorm weight
+            ppw = batchNorm_W + o_3;
+            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            ppw = batchNorm_W + out_.depth_ + o_3;
+            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
+            set_dram_read_weight_cmd();
+        }
+
+        if(fourth_core_en)
+        {
+            // read weight from dram
+            set_gemm_core_sel_cmd(8);
+            int offset_w = (weight_.height_ * (in_.depth_ * o_4)) * weight_.width_;
+            const my_float_t * ppw = W + offset_w;
+            uint32_t tmp_s, tmp_s_2;
+            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
+                                remain_oc_4, tmp_s);
+            
+            // read batchNorm weight
+            ppw = batchNorm_W + o_4;
+            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            ppw = batchNorm_W + out_.depth_ + o_4;
+            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
+            set_dram_read_weight_cmd();
+        }
         set_gemm_core_sel_cmd(1);
         send_weight_time += (clock() - tmp_tick)/ticks_per_msec;
         
         __asm__ volatile ("nop");
         int output_offset = 0;
-        /*
-         * configuration for read input
-         */
-        set_gemm_core_sel_cmd(15);
-        set_gemm_core_sel_cmd(1);
 
         int num_lans_get = 1;
         int conv_0_offset = 0;
@@ -575,22 +544,54 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                         memcpy(&tmp_s, &pa, sizeof(tmp_s));
                         set_dram_write_addr_cmd(s%4, tmp_s);
                         set_dram_w_tr_cmd();
-                        wait_idle_quick_cmd();
+                        wait_idle_2_quick_cmd();
                     }
                     set_gemm_core_sel_cmd(1);
                 }
+
+                if(third_core_en) {
+                    set_gemm_core_sel_cmd(4);
+                    for(int s = 0; s < 4; s++) {
+                        my_float_t *pa = &a[(o_3 + s) * 3136];
+
+                        set_num_lans_cmd(s%4);
+                        
+                        set_output_recv_cnt_cmd(0);
+                        uint32_t tmp_s;
+                        pa = pa + conv_0_offset;
+                        memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        set_dram_write_addr_cmd(s%4, tmp_s);
+                        set_dram_w_tr_cmd();
+                        wait_idle_3_quick_cmd();
+                    }
+                    set_gemm_core_sel_cmd(1);
+                }
+
+                if(fourth_core_en) {
+                    set_gemm_core_sel_cmd(8);
+                    for(int s = 0; s < 4; s++) {
+                        my_float_t *pa = &a[(o_4 + s) * 3136];
+
+                        set_num_lans_cmd(s%4);
+                        
+                        set_output_recv_cnt_cmd(0);
+                        uint32_t tmp_s;
+                        pa = pa + conv_0_offset;
+                        memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        set_dram_write_addr_cmd(s%4, tmp_s);
+                        set_dram_w_tr_cmd();
+                        wait_idle_4_quick_cmd();
+                    }
+                    set_gemm_core_sel_cmd(1);
+                }
+
                 conv_0_offset += 56;
             }
-
-            wait_idle_cmd();
-        }
-        if(second_core_en) {
-            o += weight_num;
         }
     }
     // for 3x3 kernel, paddingSize = 1
     else if (weight_.height_ == 3)
-    for (int o = start; o < end; o += weight_num * 4)
+    for (int o = start; o < end; o += weight_num * 1)
     {
         // printf("[%s]: %d/%d\n", entry->base.layer_name_, (int)(o + 1), (int)end);
         
@@ -600,18 +601,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         int second_core_en, third_core_en, fourth_core_en;
 
-        second_core_en = 1;
-        // second_core_en = 0;
+        // second_core_en = 1;
+        second_core_en = 0;
         o_2 = o + weight_num;
         remain_oc_2 = min(weight_num, end - o_2);
 
-        third_core_en = 1;
-        // third_core_en = 0;
+        // third_core_en = 1;
+        third_core_en = 0;
         o_3 = o_2 + weight_num;
         remain_oc_3 = min(weight_num, end - o_3);
 
-        fourth_core_en = 1;
-        // fourth_core_en = 0;
+        // fourth_core_en = 1;
+        fourth_core_en = 0;
         o_4 = o_3 + weight_num;
         remain_oc_4 = min(weight_num, end - o_4);
 
@@ -869,7 +870,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     }
     // for 1x1 convolution
     else
-    for (int o = start; o < end; o += weight_num * 4)
+    for (int o = start; o < end; o += weight_num * 1)
     {
         // printf("[%s]: %d/%d\n", entry->base.layer_name_, (int)(o + 1), (int)end);
         
@@ -879,18 +880,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         int second_core_en, third_core_en, fourth_core_en;
 
-        second_core_en = 1;
-        // second_core_en = 0;
+        // second_core_en = 1;
+        second_core_en = 0;
         o_2 = o + weight_num;
         remain_oc_2 = min(weight_num, end - o_2);
 
-        third_core_en = 1;
-        // third_core_en = 0;
+        // third_core_en = 1;
+        third_core_en = 0;
         o_3 = o_2 + weight_num;
         remain_oc_3 = min(weight_num, end - o_3);
 
-        fourth_core_en = 1;
-        // fourth_core_en = 0;
+        // fourth_core_en = 1;
+        fourth_core_en = 0;
         o_4 = o_3 + weight_num;
         remain_oc_4 = min(weight_num, end - o_4);
 

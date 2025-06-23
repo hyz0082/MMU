@@ -307,9 +307,9 @@ always_ff @( posedge clk_i ) begin
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_ADDR) begin
         S_DEVICE_data_o  <= {16'h0, ret_data_out_reg};
     end
-    else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_MAX_POOLING_ADDR) begin
-        S_DEVICE_data_o  <= ret_max_pooling[0];
-    end
+    // else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_MAX_POOLING_ADDR) begin
+    //     S_DEVICE_data_o  <= ret_max_pooling[0];
+    // end
     else if(S_DEVICE_strobe_i && S_DEVICE_addr_i == RET_AVG_POOLING_ADDR) begin
         S_DEVICE_data_o  <= ret_avg_pooling[0];
     end
@@ -447,10 +447,10 @@ t1 (
     .tpu_param_1_in(tpu_param_1_in),    // data 1
     .tpu_param_2_in(tpu_param_2_in),     // data 2
     
-    .tpu_data_1_in(tpu_data_1_in),
-    .tpu_data_2_in(tpu_data_2_in),
-    .tpu_data_3_in(tpu_data_3_in),
-    .tpu_data_4_in(tpu_data_4_in),
+    // .tpu_data_1_in(tpu_data_1_in),
+    // .tpu_data_2_in(tpu_data_2_in),
+    // .tpu_data_3_in(tpu_data_3_in),
+    // .tpu_data_4_in(tpu_data_4_in),
 
     .tpu_data_1_out(P_data_out_1[0]),
     .tpu_data_2_out(P_data_out_2[0]),
@@ -459,7 +459,7 @@ t1 (
     
     .ret_valid(ret_valid[0]),
     .ret_data_out(ret_data_out[0]),
-    .ret_max_pooling(ret_max_pooling[0]),
+    // .ret_max_pooling(ret_max_pooling[0]),
     .ret_avg_pooling(ret_avg_pooling[0]),
     .ret_softmax_result(ret_softmax_result[0]),
 
@@ -484,122 +484,142 @@ t1 (
     .tpu_busy(tpu_busy[0])     
 );
 
-TPU #(
-    .ACLEN(ACLEN),
-    .ADDR_BITS(ADDR_BITS),
-    .DATA_WIDTH(DATA_WIDTH)
-) 
-t2 (
-    .clk_i(clk_i), .rst_i(rst_i),
-    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[1]),     // tpu valid
-    .tpu_cmd(tpu_cmd),           // tpu
-    .tpu_param_1_in(tpu_param_1_in),    // data 1
-    .tpu_param_2_in(tpu_param_2_in),     // data 2
+
+generate
+   for(genvar i = 1; i < GEMM_NUM; i++) begin
+       TPU #(
+   .ACLEN(ACLEN),
+   .ADDR_BITS(ADDR_BITS),
+   .DATA_WIDTH(DATA_WIDTH)
+   ) 
+   t (
+       .clk_i(clk_i), .rst_i(rst_i),
+       .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[i]),     // tpu valid
+       .tpu_cmd(tpu_cmd),           // tpu
+       .tpu_param_1_in(tpu_param_1_in),    // data 1
+       .tpu_param_2_in(tpu_param_2_in),     // data 2
+        
+       .tpu_data_1_out(P_data_out_1[i]),
+       .tpu_data_2_out(P_data_out_2[i]),
+       .tpu_data_3_out(P_data_out_3[i]),
+       .tpu_data_4_out(P_data_out_4[i]),
+        
+       .ret_valid(ret_valid[i]),
+       .ret_data_out(ret_data_out[i]),
+       .ret_avg_pooling(ret_avg_pooling[i]),
+       .ret_softmax_result(ret_softmax_result[i]),
+
+       // first dual port sram control signal
+       .gbuff_data_out_0(gbuff_data_out[0]),
+       .gbuff_data_out_1(gbuff_data_out[1]),
+
+       // second dual port sram control signal
+       .gbuff_data_out_2(gbuff_data_out[2]),
+       .gbuff_data_out_3(gbuff_data_out[3]),
+
+       .tpu_busy(tpu_busy[i])     
+   );
+   end
+endgenerate
+
+//  TPU #(
+//      .ACLEN(ACLEN),
+//      .ADDR_BITS(ADDR_BITS),
+//      .DATA_WIDTH(DATA_WIDTH)
+//  ) 
+//  t2 (
+//      .clk_i(clk_i), .rst_i(rst_i),
+//      .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[1]),     // tpu valid
+//      .tpu_cmd(tpu_cmd),           // tpu
+//      .tpu_param_1_in(tpu_param_1_in),    // data 1
+//      .tpu_param_2_in(tpu_param_2_in),     // data 2
     
-    .tpu_data_1_in(tpu_data_1_in),
-    .tpu_data_2_in(tpu_data_2_in),
-    .tpu_data_3_in(tpu_data_3_in),
-    .tpu_data_4_in(tpu_data_4_in),
-
-    .tpu_data_1_out(P_data_out_1[1]),
-    .tpu_data_2_out(P_data_out_2[1]),
-    .tpu_data_3_out(P_data_out_3[1]),
-    .tpu_data_4_out(P_data_out_4[1]),
+//      .tpu_data_1_out(P_data_out_1[1]),
+//      .tpu_data_2_out(P_data_out_2[1]),
+//      .tpu_data_3_out(P_data_out_3[1]),
+//      .tpu_data_4_out(P_data_out_4[1]),
     
-    .ret_valid(ret_valid[1]),
-    .ret_data_out(ret_data_out[1]),
-    .ret_max_pooling(ret_max_pooling[1]),
-    .ret_avg_pooling(ret_avg_pooling[1]),
-    .ret_softmax_result(ret_softmax_result[1]),
+//      .ret_valid(ret_valid[1]),
+//      .ret_data_out(ret_data_out[1]),
+//      .ret_avg_pooling(ret_avg_pooling[1]),
+//      .ret_softmax_result(ret_softmax_result[1]),
 
-    // first dual port sram control signal
-    .gbuff_data_out_0(gbuff_data_out[0]),
-    .gbuff_data_out_1(gbuff_data_out[1]),
+//      // first dual port sram control signal
+//      .gbuff_data_out_0(gbuff_data_out[0]),
+//      .gbuff_data_out_1(gbuff_data_out[1]),
 
-    // second dual port sram control signal
-    .gbuff_data_out_2(gbuff_data_out[2]),
-    .gbuff_data_out_3(gbuff_data_out[3]),
+//      // second dual port sram control signal
+//      .gbuff_data_out_2(gbuff_data_out[2]),
+//      .gbuff_data_out_3(gbuff_data_out[3]),
 
-    .tpu_busy(tpu_busy[1])     
-);
+//      .tpu_busy(tpu_busy[1])     
+//  );
 
-TPU #(
-    .ACLEN(ACLEN),
-    .ADDR_BITS(ADDR_BITS),
-    .DATA_WIDTH(DATA_WIDTH)
-) 
-t3 (
-    .clk_i(clk_i), .rst_i(rst_i),
-    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[2]),     // tpu valid
-    .tpu_cmd(tpu_cmd),           // tpu
-    .tpu_param_1_in(tpu_param_1_in),    // data 1
-    .tpu_param_2_in(tpu_param_2_in),     // data 2
+//  TPU #(
+//      .ACLEN(ACLEN),
+//      .ADDR_BITS(ADDR_BITS),
+//      .DATA_WIDTH(DATA_WIDTH)
+//  ) 
+//  t3 (
+//      .clk_i(clk_i), .rst_i(rst_i),
+//      .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[2]),     // tpu valid
+//      .tpu_cmd(tpu_cmd),           // tpu
+//      .tpu_param_1_in(tpu_param_1_in),    // data 1
+//      .tpu_param_2_in(tpu_param_2_in),     // data 2
     
-    .tpu_data_1_in(tpu_data_1_in),
-    .tpu_data_2_in(tpu_data_2_in),
-    .tpu_data_3_in(tpu_data_3_in),
-    .tpu_data_4_in(tpu_data_4_in),
-
-    .tpu_data_1_out(P_data_out_1[2]),
-    .tpu_data_2_out(P_data_out_2[2]),
-    .tpu_data_3_out(P_data_out_3[2]),
-    .tpu_data_4_out(P_data_out_4[2]),
+//      .tpu_data_1_out(P_data_out_1[2]),
+//      .tpu_data_2_out(P_data_out_2[2]),
+//      .tpu_data_3_out(P_data_out_3[2]),
+//      .tpu_data_4_out(P_data_out_4[2]),
     
-    .ret_valid(ret_valid[2]),
-    .ret_data_out(ret_data_out[2]),
-    .ret_max_pooling(ret_max_pooling[2]),
-    .ret_avg_pooling(ret_avg_pooling[2]),
-    .ret_softmax_result(ret_softmax_result[2]),
+//      .ret_valid(ret_valid[2]),
+//      .ret_data_out(ret_data_out[2]),
+//      .ret_avg_pooling(ret_avg_pooling[2]),
+//      .ret_softmax_result(ret_softmax_result[2]),
 
-    // first dual port sram control signal
-    .gbuff_data_out_0(gbuff_data_out[0]),
-    .gbuff_data_out_1(gbuff_data_out[1]),
+//      // first dual port sram control signal
+//      .gbuff_data_out_0(gbuff_data_out[0]),
+//      .gbuff_data_out_1(gbuff_data_out[1]),
 
-    // second dual port sram control signal
-    .gbuff_data_out_2(gbuff_data_out[2]),
-    .gbuff_data_out_3(gbuff_data_out[3]),
+//      // second dual port sram control signal
+//      .gbuff_data_out_2(gbuff_data_out[2]),
+//      .gbuff_data_out_3(gbuff_data_out[3]),
 
-    .tpu_busy(tpu_busy[2])     
-);
+//      .tpu_busy(tpu_busy[2])     
+//  );
 
-TPU #(
-    .ACLEN(ACLEN),
-    .ADDR_BITS(ADDR_BITS),
-    .DATA_WIDTH(DATA_WIDTH)
-) 
-t4 (
-    .clk_i(clk_i), .rst_i(rst_i),
-    .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[3]),     // tpu valid
-    .tpu_cmd(tpu_cmd),           // tpu
-    .tpu_param_1_in(tpu_param_1_in),    // data 1
-    .tpu_param_2_in(tpu_param_2_in),     // data 2
+//  TPU #(
+//      .ACLEN(ACLEN),
+//      .ADDR_BITS(ADDR_BITS),
+//      .DATA_WIDTH(DATA_WIDTH)
+//  ) 
+//  t4 (
+//      .clk_i(clk_i), .rst_i(rst_i),
+//      .tpu_cmd_valid(tpu_cmd_valid && gemm_core_sel[3]),     // tpu valid
+//      .tpu_cmd(tpu_cmd),           // tpu
+//      .tpu_param_1_in(tpu_param_1_in),    // data 1
+//      .tpu_param_2_in(tpu_param_2_in),     // data 2
     
-    .tpu_data_1_in(tpu_data_1_in),
-    .tpu_data_2_in(tpu_data_2_in),
-    .tpu_data_3_in(tpu_data_3_in),
-    .tpu_data_4_in(tpu_data_4_in),
-
-    .tpu_data_1_out(P_data_out_1[3]),
-    .tpu_data_2_out(P_data_out_2[3]),
-    .tpu_data_3_out(P_data_out_3[3]),
-    .tpu_data_4_out(P_data_out_4[3]),
+//      .tpu_data_1_out(P_data_out_1[3]),
+//      .tpu_data_2_out(P_data_out_2[3]),
+//      .tpu_data_3_out(P_data_out_3[3]),
+//      .tpu_data_4_out(P_data_out_4[3]),
     
-    .ret_valid(ret_valid[3]),
-    .ret_data_out(ret_data_out[3]),
-    .ret_max_pooling(ret_max_pooling[3]),
-    .ret_avg_pooling(ret_avg_pooling[3]),
-    .ret_softmax_result(ret_softmax_result[3]),
+//      .ret_valid(ret_valid[3]),
+//      .ret_data_out(ret_data_out[3]),
+//      .ret_avg_pooling(ret_avg_pooling[3]),
+//      .ret_softmax_result(ret_softmax_result[3]),
 
-    // first dual port sram control signal
-    .gbuff_data_out_0(gbuff_data_out[0]),
-    .gbuff_data_out_1(gbuff_data_out[1]),
+//      // first dual port sram control signal
+//      .gbuff_data_out_0(gbuff_data_out[0]),
+//      .gbuff_data_out_1(gbuff_data_out[1]),
 
-    // second dual port sram control signal
-    .gbuff_data_out_2(gbuff_data_out[2]),
-    .gbuff_data_out_3(gbuff_data_out[3]),
+//      // second dual port sram control signal
+//      .gbuff_data_out_2(gbuff_data_out[2]),
+//      .gbuff_data_out_3(gbuff_data_out[3]),
 
-    .tpu_busy(tpu_busy[3])     
-);
+//      .tpu_busy(tpu_busy[3])     
+//  );
 
 /*
  * MULTIPLE READ 
