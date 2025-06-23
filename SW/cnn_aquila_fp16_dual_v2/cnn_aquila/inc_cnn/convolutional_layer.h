@@ -793,7 +793,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 wait_idle_quick_cmd();
             }
             
-            wait_idle_cmd();
+            // wait_idle_cmd();
 
             if(second_core_en)
             {
@@ -816,7 +816,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 }
                 set_gemm_core_sel_cmd(1);
             }
-            wait_idle_cmd();
+            // wait_idle_cmd();
 
             if(third_core_en)
             {
@@ -839,7 +839,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 }
                 set_gemm_core_sel_cmd(1);
             }
-            wait_idle_cmd();
+            // wait_idle_cmd();
 
             if(fourth_core_en)
             {
@@ -862,7 +862,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 }
                 set_gemm_core_sel_cmd(1);
             }
-            wait_idle_cmd();
+            // wait_idle_cmd();
             output_offset += input_num;
             store_data_time += (clock() - tmp_tick)/ticks_per_msec;
         }
@@ -1043,7 +1043,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 wait_idle_quick_cmd();
             }
             
-            wait_idle_cmd();
+            // wait_idle_cmd();
 
             if(second_core_en)
             {
@@ -1066,7 +1066,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 }
                 set_gemm_core_sel_cmd(1);
             }
-            wait_idle_cmd();
+            // wait_idle_cmd();
 
             if(third_core_en)
             {
@@ -1089,7 +1089,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 }
                 set_gemm_core_sel_cmd(1);
             }
-            wait_idle_cmd();
+            // wait_idle_cmd();
 
             if(fourth_core_en)
             {
@@ -1112,7 +1112,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 }
                 set_gemm_core_sel_cmd(1);
             }
-            wait_idle_cmd();
+            // wait_idle_cmd();
             output_offset += input_num;
             store_data_time += (clock() - tmp_tick)/ticks_per_msec;
         }

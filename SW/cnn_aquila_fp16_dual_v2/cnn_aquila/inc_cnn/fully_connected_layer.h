@@ -69,6 +69,8 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         entry->base.out_ptr_ = entry->base.a_ptr_;
     }
 
+    set_gemm_core_sel_cmd(15);
+
     my_float_t *in = input->in_ptr_;
     my_float_t *a = entry->base.a_ptr_;
     my_float_t *W = entry->base._W;
@@ -95,12 +97,11 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
 
     reset_preload_cmd();
 
-    set_gemm_core_sel_cmd(1);
-
+    set_gemm_core_sel_cmd(15);
     for(int i = 0; i < kernel_len*4; i++) {
         send_idx_cmd(i, i);
     }
-
+    set_gemm_core_sel_cmd(15);
     for(int i = 0; i < 1024; i++) {
         send_offset_1_cmd(0, i);
         send_offset_2_cmd(0, i);
@@ -109,7 +110,7 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
     }
 
     reset_relu_cmd();
-
+    set_gemm_core_sel_cmd(15);
     my_float_t *pi = in;
     reset_sram_offset_cmd();
     set_dram_read_input_cmd();
@@ -123,16 +124,43 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         wait_idle_quick_cmd();
         pi += 100;
     }
-    
-    my_float_t cur_max = -9999;
+    set_gemm_core_sel_cmd(15);
+    int batchNormIndex = 0;
+    for(int oc = 0; oc < 256; oc+= 4) {
+        set_mul_sram_0_cmd(1, batchNormIndex);
+        set_mul_sram_1_cmd(1, batchNormIndex);
+        set_mul_sram_2_cmd(1, batchNormIndex);
+        set_mul_sram_3_cmd(1, batchNormIndex);
 
-    for (int i = start; i < end; i += weight_num)
+        set_add_sram_0_cmd(0, batchNormIndex);
+        set_add_sram_1_cmd(0, batchNormIndex);
+        set_add_sram_2_cmd(0, batchNormIndex);
+        set_add_sram_3_cmd(0, batchNormIndex);
+        batchNormIndex ++;
+        __asm__ volatile ("nop");
+    }
+
+    my_float_t cur_max = -9999;
+    static int fc_num = 0;
+
+    for (int i = start; i < end; i += weight_num * 1)
     {
         // send weight_num weight
         int remain_len = min(weight_num, end - i);
-        int send_weight_cnt = 0;
         
+        int second_core_en, third_core_en, fourth_core_en;
+        int i_2, i_3, i_4;
+
+        i_2 = i   + weight_num;
+        i_3 = i_2 + weight_num;
+        i_4 = i_3 + weight_num;
+
+        second_core_en = 0;
+        third_core_en  = 0;
+        fourth_core_en = 0;
+
         // read weight
+        set_gemm_core_sel_cmd(1);
         set_dram_read_weight_cmd();
         reset_sram_offset_cmd();
         set_length_cmd(entry->base.in_size_);
@@ -145,28 +173,60 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
             wait_idle_quick_cmd();
         }
 
-        int batchNormIndex = 0;
-        for(int oc = 0; oc < remain_len; oc+= 4) {
-            set_mul_sram_0_cmd(1, batchNormIndex);
-            set_mul_sram_1_cmd(1, batchNormIndex);
-            set_mul_sram_2_cmd(1, batchNormIndex);
-            set_mul_sram_3_cmd(1, batchNormIndex);
-
-            set_add_sram_0_cmd(0, batchNormIndex);
-            set_add_sram_1_cmd(0, batchNormIndex);
-            set_add_sram_2_cmd(0, batchNormIndex);
-            set_add_sram_3_cmd(0, batchNormIndex);
-            batchNormIndex ++;
-            __asm__ volatile ("nop");
+        if(second_core_en) {
+            set_gemm_core_sel_cmd(2);
+            set_dram_read_weight_cmd();
+            reset_sram_offset_cmd();
+            set_length_cmd(entry->base.in_size_);
+            for(int oc = 0; oc < remain_len; oc++) {
+                const my_float_t * ppw = &W[(i_2+oc)*entry->base.in_size_];
+                uint32_t tmp_s;
+                memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+                set_addr_cmd(tmp_s);
+                trigger_dram_read_cmd();
+                wait_idle_2_quick_cmd();
+            }
         }
 
-        __asm__ volatile ("nop");
+        if(third_core_en) {
+            set_gemm_core_sel_cmd(4);
+            set_dram_read_weight_cmd();
+            reset_sram_offset_cmd();
+            set_length_cmd(entry->base.in_size_);
+            for(int oc = 0; oc < remain_len; oc++) {
+                const my_float_t * ppw = &W[(i_3+oc)*entry->base.in_size_];
+                uint32_t tmp_s;
+                memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+                set_addr_cmd(tmp_s);
+                trigger_dram_read_cmd();
+                wait_idle_3_quick_cmd();
+            }
+        }
+
+        if(fourth_core_en) {
+            set_gemm_core_sel_cmd(8);
+            set_dram_read_weight_cmd();
+            reset_sram_offset_cmd();
+            set_length_cmd(entry->base.in_size_);
+            for(int oc = 0; oc < remain_len; oc++) {
+                const my_float_t * ppw = &W[(i_4+oc)*entry->base.in_size_];
+                uint32_t tmp_s;
+                memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+                set_addr_cmd(tmp_s);
+                trigger_dram_read_cmd();
+                wait_idle_4_quick_cmd();
+            }
+        }
+
+        set_gemm_core_sel_cmd(15);
         __asm__ volatile ("nop");
         trigger_conv_cmd();
         wait_idle_quick_cmd();
+
         int var[4] = {0, 4, 8, 12};
+        set_gemm_core_sel_cmd(1);
         for(int m = 0; m < remain_len; m++) {
-            static int fc_num = 0;
+            // static int fc_num = 0;
             printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
             if (entry->has_bias_) {
                     my_float_t tmp_a = read_data_cmd(var[m%4], m/4) + read_dram_value_cmd(&b[i+m]);
@@ -177,8 +237,57 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
                 write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
             }
         }
-    }
 
+        if(second_core_en) {
+            set_gemm_core_sel_cmd(2);
+            for(int m = 0; m < remain_len; m++) {
+                // static int fc_num = 0;
+                // printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
+                if (entry->has_bias_) {
+                        my_float_t tmp_a = read_data_cmd(var[m%4], m/4) + read_dram_value_cmd(&b[i_2+m]);
+                        cur_max = max(cur_max, tmp_a);
+                        write_dram_value_cmd(&a[i_2+m], tmp_a);
+                }
+                else {
+                    write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
+                }
+            }
+        }
+
+        if(third_core_en) {
+            set_gemm_core_sel_cmd(4);
+            for(int m = 0; m < remain_len; m++) {
+                // static int fc_num = 0;
+                // printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
+                if (entry->has_bias_) {
+                        my_float_t tmp_a = read_data_cmd(var[m%4], m/4) + read_dram_value_cmd(&b[i_3+m]);
+                        cur_max = max(cur_max, tmp_a);
+                        write_dram_value_cmd(&a[i_3+m], tmp_a);
+                }
+                else {
+                    write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
+                }
+            }
+        }
+
+        if(fourth_core_en) {
+            set_gemm_core_sel_cmd(8);
+            for(int m = 0; m < remain_len; m++) {
+                // static int fc_num = 0;
+                // printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
+                if (entry->has_bias_) {
+                        my_float_t tmp_a = read_data_cmd(var[m%4], m/4) + read_dram_value_cmd(&b[i_4+m]);
+                        cur_max = max(cur_max, tmp_a);
+                        write_dram_value_cmd(&a[i_4+m], tmp_a);
+                }
+                else {
+                    write_dram_value_cmd(&a[i+m], read_data_cmd(var[m%4], m/4));
+                }
+            }
+        }
+        set_gemm_core_sel_cmd(15);
+    }
+    set_gemm_core_sel_cmd(1);
     for (int i = start; i < end; i++) {
         send_exp_acc_cmd(read_dram_value_cmd(&a[i]) - cur_max);
         wait_idle_quick_cmd();

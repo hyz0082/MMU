@@ -241,7 +241,7 @@ module mem_arbiter #(
             dram_addr_valid_r <= 0;
         else if (dram_addr_valid_i)
             dram_addr_valid_r <= 1;
-        else if (dram_data_valid_o)
+        else if (dram_data_valid_o || dram_write_done_o)
             dram_addr_valid_r <= 0; // Clear the strobe
     end
     
