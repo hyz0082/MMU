@@ -413,22 +413,6 @@ void trigger_bn_cmd() {
 void wait_idle_cmd() {
     while((*BUSY_ADDR));
     __asm__ volatile ("nop");
-    // while((*BUSY_ADDR));
-    // __asm__ volatile ("nop");
-    // while((*BUSY_ADDR));
-    // for(int i = 0; i < 50; i++) {
-    //     __asm__ volatile ("nop");
-    // }
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
-    // __asm__ volatile ("nop");
 }
 
 void wait_idle_quick_cmd() {

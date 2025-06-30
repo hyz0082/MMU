@@ -227,7 +227,7 @@ void fully_connected_layer_forward_propagation(struct list_node *ptr, unsigned i
         set_gemm_core_sel_cmd(1);
         for(int m = 0; m < remain_len; m++) {
             // static int fc_num = 0;
-            printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
+            // printf("got fc %d: %f\n", fc_num++, (float)read_data_cmd(var[m%4], m/4));
             if (entry->has_bias_) {
                     my_float_t tmp_a = read_data_cmd(var[m%4], m/4) + read_dram_value_cmd(&b[i+m]);
                     cur_max = max(cur_max, tmp_a);
