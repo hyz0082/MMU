@@ -4,51 +4,10 @@
 //  Author  : 
 //  Date    : 
 // -----------------------------------------------------------------------------
-// Description:
-// This module implements a Processing Element (PE) for a General Matrix Multiplication (GeMM)
-// accelerator. It supports two modes of operation: Convolution Mode and Fixed Value MAC Mode.
-//
-// Convolution Mode:
-//   - Performs Multiply-Accumulate (MAC) operations for convolution.
-//   - Inputs: 'data_in' (input data), 'weight_in' (convolution weights).
-//   - Accumulates the results in 'mac_reg'.
-//   - 'conv_len' parameter defines the length of the convolution.
-//
-// Fixed MAC Mode:
-//   - Performs MAC operations with fixed multiplier and adder values.
-//   - Inputs: 'mul_val_reg' (fixed multiplier), 'add_val_reg' (fixed adder).
-//   - Accumulates the results in 'mac_reg'.
-//
-// The module receives commands ('pe_cmd') to control its operation, including:
-//   - RESET: Resets the accumulator ('mac_reg').
-//   - TRIGGER: Initiates a MAC operation.
-//   - SET_MUL_VAL: Sets the fixed multiplier value.
-//   - SET_ADD_VAL: Sets the fixed adder value.
-//   - LOAD_DATA: Loads a value into the accumulator.
-//   - SET_CONV_MODE: Switches to Convolution Mode.
-//   - SET_FIX_MAC_MODE: Switches to Fixed MAC Mode.
-//   - IDLE: Sets the PE to idle state.
-//
-// The module outputs the accumulated value ('mac_value'), the passed-through
-// 'data_out' and 'weight_out' values, and a 'busy' signal indicating its operational state.
-//
-// Implementation:
-// The module uses a register 'mac_reg' to accumulate the MAC results. The 'mode' register
-// selects between Convolution Mode and Fixed MAC Mode. The input data and weights are
-// bypassed through 'data_out' and 'weight_out' on a TRIGGER command.
-//
-// The actual MAC operation is performed by external modules 'floating_point_0' (FP) and
-// 'floating_point_acc' (ACC) when 'VIVADO_ENV' is defined. Otherwise, a simplified
-// integer multiplication is used to simulate floating-point behavior.
-//
-// The convolution length is controlled by 'conv_len' and 'last_cnt' registers. The
-// 'busy' signal indicates whether the PE is currently performing a MAC operation.
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // =============================================================================
 
-
-// `include "config.svh"
 `define VIVADO_ENV
 
 module PE
@@ -56,14 +15,13 @@ module PE
   parameter DATA_WIDTH = 32
 )
 (
-    /////////// System signals   ///////////////////////////////////////////////
     input                         clk_i, rst_i,
-    ///////////   PE command    ///////////////////////////////////////////////
-    input                         pe_cmd_valid,    // pe_cmd valid
-    input      [ACLEN : 0]        pe_cmd,          // pe_cmd
-    input      [DATA_WIDTH-1 : 0] param_1_in,      // pe_cmd param1
-    input      [DATA_WIDTH-1 : 0] param_2_in,      // pe_cmd param2
-    input      [DATA_WIDTH-1 : 0] preload_data_in, // pe_cmd param2
+    
+    input                         pe_cmd_valid,
+    input      [ACLEN : 0]        pe_cmd,
+    input      [DATA_WIDTH-1 : 0] param_1_in,
+    input      [DATA_WIDTH-1 : 0] param_2_in,
+    input      [DATA_WIDTH-1 : 0] preload_data_in, 
 
     /////////// PE input   ///////////////////////////////////////////////
     input      [DATA_WIDTH-1 : 0] data_in,
@@ -86,12 +44,12 @@ localparam  TRIGGER           = 1; //
 localparam  TRIGGER_LAST      = 2; // 
                                   // param_1_in: 
                                   // param_2_in:
-localparam  SET_MUL_VAL       = 3; // 
-                                  // param_1_in: 
-                                  // param_2_in:
-localparam  SET_ADD_VAL       = 4; // 
-                                  // param_1_in: 
-                                  // param_2_in:
+// localparam  SET_MUL_VAL       = 3; // 
+//                                   // param_1_in: 
+//                                   // param_2_in:
+// localparam  SET_ADD_VAL       = 4; // 
+//                                   // param_1_in: 
+//                                   // param_2_in:
 localparam  LOAD_DATA         = 5; // 
                                   // param_1_in: 
                                   // param_2_in:
@@ -110,11 +68,11 @@ localparam  TRIGGER_BN   = 17; // whole
 localparam  CONV_MODE          = 0;
 localparam  FIX_MAC_MODE       = 1;
 
-reg mode; // 0 for normal mac, 1 for fix value mac
+// reg mode; // 0 for normal mac, 1 for fix value mac
 
 reg [DATA_WIDTH-1 : 0] mac_reg;
-reg [DATA_WIDTH-1 : 0] mul_val_reg;
-reg [DATA_WIDTH-1 : 0] add_val_reg;
+// reg [DATA_WIDTH-1 : 0] mul_val_reg;
+// reg [DATA_WIDTH-1 : 0] add_val_reg;
 
 wire [DATA_WIDTH-1 : 0] a_data, b_data, c_data;
 wire                    t_valid;
@@ -153,33 +111,33 @@ end
 //#########################
 //#    SET MUL/ADD VAL    #
 //#########################
-always@(posedge clk_i) begin
-    if(rst_i) begin
-        mul_val_reg <= 0;
-        add_val_reg <= 0;
-    end
-    else if(pe_cmd_valid && pe_cmd == SET_MUL_VAL) begin
-        mul_val_reg <= param_2_in;
-    end
-    else if(pe_cmd_valid && pe_cmd == SET_ADD_VAL) begin
-        add_val_reg <= param_2_in;
-    end
-end
+// always@(posedge clk_i) begin
+//     if(rst_i) begin
+//         mul_val_reg <= 0;
+//         add_val_reg <= 0;
+//     end
+//     else if(pe_cmd_valid && pe_cmd == SET_MUL_VAL) begin
+//         mul_val_reg <= param_2_in;
+//     end
+//     else if(pe_cmd_valid && pe_cmd == SET_ADD_VAL) begin
+//         add_val_reg <= param_2_in;
+//     end
+// end
 
 //#########################
 //#   SET MODE(CONV/BN)   #
 //#########################
-always@(posedge clk_i) begin
-    if(rst_i) begin
-        mode <= 0;
-    end
-    else if(pe_cmd_valid && pe_cmd == SET_CONV_MODE) begin
-        mode <= CONV_MODE;
-    end
-    else if(pe_cmd_valid && pe_cmd == SET_FIX_MAC_MODE) begin
-        mode <= FIX_MAC_MODE;
-    end
-end
+// always@(posedge clk_i) begin
+//     if(rst_i) begin
+//         mode <= 0;
+//     end
+//     else if(pe_cmd_valid && pe_cmd == SET_CONV_MODE) begin
+//         mode <= CONV_MODE;
+//     end
+//     else if(pe_cmd_valid && pe_cmd == SET_FIX_MAC_MODE) begin
+//         mode <= FIX_MAC_MODE;
+//     end
+// end
 
 assign a_data = data_in;
 assign b_data = weight_in;

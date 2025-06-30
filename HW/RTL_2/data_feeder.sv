@@ -87,7 +87,7 @@ assign S_DEVICE_data_i_t = S_DEVICE_data_i;
 
 logic   [GEMM_NUM-1 : 0]   ret_valid;
 logic   [DATA_WIDTH-1 : 0] ret_data_out    [0 : GEMM_NUM-1];
-logic   [DATA_WIDTH-1 : 0] ret_max_pooling [0 : GEMM_NUM-1];
+// logic   [DATA_WIDTH-1 : 0] ret_max_pooling [0 : GEMM_NUM-1];
 logic   [DATA_WIDTH-1 : 0] ret_avg_pooling [0 : GEMM_NUM-1];
 logic   [DATA_WIDTH-1 : 0] ret_softmax_result [0 : GEMM_NUM-1];
 // 0xC400000A

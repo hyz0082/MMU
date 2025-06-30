@@ -10,20 +10,17 @@
 module MMU
 #(parameter ACLEN  = 8,
   parameter DATA_WIDTH = 32
-//   parameter CLSIZE = `CLP
 )
 (
-    /////////// System signals   ///////////////////////////////////////////////
     input   logic                        clk_i, rst_i,
-    /////////// MMU command ///////////////////////////////////////////////
-    input   logic                        mmu_cmd_valid, // cmd valid
-    input   logic   [ACLEN : 0]          mmu_cmd,       // cmd
-    input   logic   [DATA_WIDTH*4-1 : 0]   param_1_in,    // cmd ctrl
-    input   logic   [DATA_WIDTH*4-1 : 0]   param_2_in,    // data
-    input   logic   [DATA_WIDTH*4-1 : 0]   param_3_in,    // data
-    input   logic   [DATA_WIDTH*4-1 : 0]   param_4_in,    // data
+   
+    input   logic                        mmu_cmd_valid,
+    input   logic   [ACLEN : 0]          mmu_cmd,
+    input   logic   [DATA_WIDTH*4-1 : 0] param_1_in,
+    input   logic   [DATA_WIDTH*4-1 : 0] param_2_in,
+    input   logic   [DATA_WIDTH*4-1 : 0] param_3_in,
+    input   logic   [DATA_WIDTH*4-1 : 0] param_4_in,
 
-    /////////// MMU input   ///////////////////////////////////////////////
     input   logic   [DATA_WIDTH-1 : 0]   data_1_in,
     input   logic   [DATA_WIDTH-1 : 0]   data_2_in,
     input   logic   [DATA_WIDTH-1 : 0]   data_3_in,
@@ -37,17 +34,6 @@ module MMU
     output  logic   [DATA_WIDTH*4-1 : 0] rdata_2_out,
     output  logic   [DATA_WIDTH*4-1 : 0] rdata_3_out,
     output  logic   [DATA_WIDTH*4-1 : 0] rdata_4_out,
-
-    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_1_in,
-    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_2_in,
-    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_3_in,
-    input   logic   [DATA_WIDTH*4-1 : 0] bn_data_4_in,
-
-    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_1_out,
-    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_2_out,
-    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_3_out,
-    output  logic   [DATA_WIDTH*4-1 : 0] bn_data_4_out,
-    output  logic   bn_valid,
 
     output  logic                        mmu_busy     // 0 for idle, 1 for busy
 );
@@ -112,38 +98,26 @@ assign params[1] = param_2_in;
 assign params[2] = param_3_in;
 assign params[3] = param_4_in;
 
-// assign bn_in[0] = bn_data_1_in;
-// assign bn_in[1] = bn_data_2_in;
-// assign bn_in[2] = bn_data_3_in;
-// assign bn_in[3] = bn_data_4_in;
-
-// assign bn_data_1_out = {bn_out[0], bn_out[4], bn_out[8] , bn_out[12]};
-// assign bn_data_2_out = {bn_out[1], bn_out[5], bn_out[9] , bn_out[13]};
-// assign bn_data_3_out = {bn_out[2], bn_out[6], bn_out[10], bn_out[14]};
-// assign bn_data_4_out = {bn_out[3], bn_out[7], bn_out[11], bn_out[15]};
-
-assign bn_valid = pe_bn_valid[0];
-
 assign whole_pe_select = (mmu_cmd == RESET)            || 
                          (mmu_cmd == TRIGGER)          ||
                          (mmu_cmd == TRIGGER_LAST)     ||
                          (mmu_cmd == SET_CONV_MODE)    || 
-                         (mmu_cmd == SET_FIX_MAC_MODE) || 
+                     //     (mmu_cmd == SET_FIX_MAC_MODE) || 
                          (mmu_cmd == FORWARD)          ||
-                         (mmu_cmd == SET_PE_VAL)       ||
-                         (mmu_cmd == TRIGGER_BN );
+                         (mmu_cmd == SET_PE_VAL)/*       ||
+                         (mmu_cmd == TRIGGER_BN )*/;
 
-assign column_select[0] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 0) ||
-                          (mmu_cmd == SET_ADD_VAL) && (param_1_in == 0);
+assign column_select[0] = 0;//(mmu_cmd == SET_MUL_VAL) && (param_1_in == 0) ||
+                     //      (mmu_cmd == SET_ADD_VAL) && (param_1_in == 0);
 
-assign column_select[1] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 1) ||
-                          (mmu_cmd == SET_ADD_VAL) && (param_1_in == 1);
+assign column_select[1] = 0;//(mmu_cmd == SET_MUL_VAL) && (param_1_in == 1) ||
+                     //      (mmu_cmd == SET_ADD_VAL) && (param_1_in == 1);
 
-assign column_select[2] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 2) ||
-                          (mmu_cmd == SET_ADD_VAL) && (param_1_in == 2);
+assign column_select[2] = 0;//(mmu_cmd == SET_MUL_VAL) && (param_1_in == 2) ||
+                     //      (mmu_cmd == SET_ADD_VAL) && (param_1_in == 2);
 
-assign column_select[3] = (mmu_cmd == SET_MUL_VAL) && (param_1_in == 3) ||
-                          (mmu_cmd == SET_ADD_VAL) && (param_1_in == 3);
+assign column_select[3] = 0;//(mmu_cmd == SET_MUL_VAL) && (param_1_in == 3) ||
+                     //      (mmu_cmd == SET_ADD_VAL) && (param_1_in == 3);
 always_comb begin : PE_VALID
        // column 0
        pe_cmd_valid[0]  = (mmu_cmd_valid && whole_pe_select)     || 

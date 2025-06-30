@@ -13,33 +13,24 @@ module TPU
   parameter DATA_WIDTH = 32
 )
 (
-    /////////// System signals   ///////////////////////////////////////////////
     input   logic                        clk_i, rst_i,
-    /////////// MMU command ///////////////////////////////////////////////
+    // cmd
     input   logic                        tpu_cmd_valid,     // tpu valid
     input   logic   [ACLEN-1 : 0]        tpu_cmd,           // tpu
     input   logic   [DATA_WIDTH-1 : 0]   tpu_param_1_in,    // data 1
     input   logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in,    // data 2
 
-    // partial load
-    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_in,
-    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_in,
-    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_in,
-    input   logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_in,
-    // output data
+    // output data 64 bits x 4
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_1_out,
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_2_out,
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_3_out,
     output  logic   [DATA_WIDTH*4-1 : 0]   tpu_data_4_out,
-
-    /////////// TPU outpupt ///////////////////////////////////////////////
+    //
     output  logic                      ret_valid,
     output  logic   [DATA_WIDTH-1 : 0] ret_data_out,
-
-    output  logic   [DATA_WIDTH-1 : 0] ret_max_pooling,
+    //
     output  logic   [DATA_WIDTH-1 : 0] ret_avg_pooling,
     output  logic   [DATA_WIDTH-1 : 0] ret_softmax_result,
-    
     // first dual port sram control signal
     output  logic                     gbuff_wr_en_0,
     output  logic  [ADDR_BITS-1  : 0] gbuff_index_0,
@@ -63,14 +54,13 @@ module TPU
     output  logic                        tpu_busy     // 0->idle, 1->busy
 );
 `include "tpu_cmd.svh"
-// `include "interface.svh"
 
 function logic is_tpu_cmd_valid_and_match(input logic [ACLEN-1 : 0] cmd_type);
     return (tpu_cmd_valid && tpu_cmd == cmd_type);
 endfunction
 
 
-typedef enum {IDLE_S, // HW_RESET_S, 
+typedef enum {IDLE_S, 
               LOAD_IDX_S,
               READ_DATA_1_S, READ_DATA_2_S, 
               READ_DATA_3_S, READ_DATA_4_S,
@@ -93,15 +83,16 @@ typedef enum {IDLE_S, // HW_RESET_S,
               AVG_POOLING_DIV_S,
               WAIT_AVG_POOLING_DIV_S,
               WAIT_MAX_POOLING_S,
-              SET_CONV_MODE_S, 
-              SET_FIX_MAC_MODE_S,
+            //   SET_CONV_MODE_S, 
+            //   SET_FIX_MAC_MODE_S,
               SW_READ_DATA_S,
               WAIT_SF_ACC_S,
               WAIT_SF_S,
               OUTPUT_1_S,
               OUTPUT_2_S,
               OUTPUT_3_S} state_t;
-(* mark_debug="true" *)    state_t curr_state, next_state;
+
+state_t curr_state, next_state;
 
 
 typedef enum {SW_READ,   SW_WRITE,
@@ -113,10 +104,10 @@ gbuff_state_t weight_status [0 : 3];
 gbuff_state_t I_status      [0 : 3];
 gbuff_state_t P_status      [0 : 3];
 
-logic                        tpu_cmd_valid_reg; // tpu valid
-logic   [ACLEN : 0]          tpu_cmd_reg;       // tpu
-logic   [DATA_WIDTH-1 : 0]   param_1_in_reg;    // data 1
-logic   [DATA_WIDTH-1 : 0]   param_2_in_reg;    // data 2
+logic                        tpu_cmd_valid_reg;
+logic   [ACLEN : 0]          tpu_cmd_reg;
+logic   [DATA_WIDTH-1 : 0]   param_1_in_reg; 
+logic   [DATA_WIDTH-1 : 0]   param_2_in_reg;
 
 logic   [DATA_WIDTH*4-1 : 0] rdata_out [0 : 3];
 
@@ -141,36 +132,28 @@ logic [DATA_WIDTH-1 : 0] col_input     [0 : 3];
 
 logic [ADDR_BITS-1 : 0] store_idx [0 : 3];
 
-//#########################
-//#    K     M     N      #
-//#########################
-logic [ADDR_BITS-1 : 0] K_reg, M_reg, N_reg; // (M * K) (K * N)
+// matrix for (M * K) (K * N)
+logic [ADDR_BITS-1 : 0] K_reg, M_reg, N_reg;
 
-logic                        mmu_cmd_valid;  // cmd
-logic [ACLEN : 0]            mmu_cmd;        // cmd
-logic [DATA_WIDTH*4-1 : 0]   mmu_param_in [0 : 3]; // data 1
+logic                        mmu_cmd_valid;
+logic [ACLEN : 0]            mmu_cmd;
+logic [DATA_WIDTH*4-1 : 0]   mmu_param_in [0 : 3];
 
-//#########################
-//#         GBUFF         #
-//#########################
+// input sram signal
 logic                        gbuff_wr_en        [0 : 3];
 logic   [ADDR_BITS-1  : 0]   gbuff_index        [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   gbuff_data_in      [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   gbuff_data_out     [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   gbuff_data_out_reg [0 : 3];
 
-//#########################
-//#        WEIGHT         #
-//#########################
+// weight sram signal
 logic                        weight_wr_en   [0 : 3];
 logic   [ADDR_BITS-1  : 0]   weight_index   [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   weight_in      [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   weight_out     [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   weight_out_reg [0 : 3];
 
-//#########################
-//#        INDEX          #
-//#########################
+// index sram signal
 logic                        I_wr_en   [0 : 3];
 logic   [ADDR_BITS-1  : 0]   I_index   [0 : 3];
 logic   [DATA_WIDTH-1 : 0]   I_in      [0 : 3];
@@ -181,9 +164,7 @@ logic   [ADDR_BITS-1 : 0]   I_out_offset_index [0 : 3];
 logic   [ADDR_BITS-1 : 0]   I_out_offset_out   [0 : 3];
 logic   [ADDR_BITS-1 : 0]   I_out_offset_out_r [0 : 3];
 
-//#########################
-//#      PARTIAL SUM      #
-//#########################
+// result sram signal
 logic                        P_wr_en        [0 : 3];
 logic   [ADDR_BITS-1    : 0] P_index        [0 : 3];
 logic   [DATA_WIDTH*4-1 : 0] P_data_in      [0 : 3];
@@ -202,20 +183,14 @@ logic preload;
 
 logic [8:0] sa_in_cnt, sa_forward_cnt;
 
-//#########################
-//#    BN CTRL SIGNAL   #
-//#########################
 /*
  * mode: 0 -> conv
  * mode: 1 -> BatchNorm
  * mode: 2 -> skip add
  */
 logic [1 : 0] mode;
-logic   [ADDR_BITS-1  : 0]   bn_len;
-logic   [ADDR_BITS-1  : 0]   bn_cnt;
-logic   [DATA_WIDTH*4-1 : 0] bn_data_out [0 : 3];
-logic bn_valid;
-logic bn_valid_reg;
+// logic   [DATA_WIDTH*4-1 : 0] bn_data_out [0 : 3];
+// logic bn_valid;
 
 /*
  * BatchNorm and add signal (follow by GeMM)
@@ -241,7 +216,7 @@ logic   [DATA_WIDTH*4-1 : 0]  bn_fma_out_r      [0 : 3];
  */
 logic [3 : 0]       bn_mul_wren;
 logic [3 : 0]       bn_add_wren;
-logic                         bn_source         [0 : 3];
+// logic                         bn_source         [0 : 3];
 logic   [ADDR_BITS-1  : 0]    bn_sram_idx       [0 : 3];
 logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_in    [0 : 3];
 logic   [DATA_WIDTH-1 : 0]    bn_add_sram_in    [0 : 3];
@@ -250,12 +225,11 @@ logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_out_r [0 : 3];
 logic   [DATA_WIDTH-1 : 0]    bn_add_sram_out   [0 : 3];
 logic   [DATA_WIDTH-1 : 0]    bn_add_sram_out_r [0 : 3];
 
-logic   [DATA_WIDTH-1 : 0]    bn_mul_val_r [0 : 3];
-logic   [DATA_WIDTH-1 : 0]    bn_add_val_r [0 : 3];
+// logic   [DATA_WIDTH-1 : 0]    bn_mul_val_r [0 : 3];
+// logic   [DATA_WIDTH-1 : 0]    bn_add_val_r [0 : 3];
 
 /*
- * BatchNorm and add signal 
- * 
+ * skip connection signal
  */
 logic   [DATA_WIDTH-1   : 0]  fma_a_data  [0 : 3];
 logic                         fma_a_valid [0 : 3];
@@ -282,14 +256,13 @@ logic   [DATA_WIDTH-1 : 0] add_val_r;
 
 
 /*
- * MAX / AVERAGE POOLING SIGNAL (NEW)
+ * AVERAGE POOLING SIGNAL (NEW)
  * 9 COMPARATER FOR MAX POOLING
  * 1 ACCUMULATOR FOR AVERAGE POOLING
  */
 logic   [DATA_WIDTH-1   : 0] pooling_data_r [0 : 51];
 logic   [ADDR_BITS-1    : 0] pooling_index;
 logic   [DATA_WIDTH-1   : 0] pooling_result;
-logic pooling_type; // 0: max pooling, 1: average pooling
 logic   [DATA_WIDTH-1   : 0] acc_data_in , div_data_in;
 logic   [DATA_WIDTH-1   : 0] acc_data_out, div_data_out;
 logic                        acc_data_in_valid, div_data_valid;
@@ -299,22 +272,9 @@ logic   [DATA_WIDTH-1   : 0] avg_pooling_data;
 
 logic   [ADDR_BITS-1    : 0] acc_recv_cnt;
 
-/*
- * MAX POOLING SIGNAL (OLD)
- */
-logic enable_max_pooling;
 logic enable_avg_pooling;
-// 3x3
-// 1 2 3 4 5 6 7 8 9
-// 12 34 56 78 9 L1
-// 1234 5678 9   L2
-// 12345678 9    L3
-// 123456789     L4
-//#########################
-//       SOFTMAX
-//#########################
-// divisor 
-// logic   [DATA_WIDTH-1 : 0]   divisor;
+
+// softmax signal
 logic   [DATA_WIDTH-1 : 0]   exp_acc, exp_acc_reg;
 logic                        exp_acc_valid, exp_acc_last;
 logic   [DATA_WIDTH-1 : 0]   exp_1_in, exp_2_in;
@@ -340,36 +300,22 @@ assign conv_next_row = (row_acc + 4 < M_reg);
 assign conv_next_col = (col_acc + 4 < N_reg);
 
 always_ff @( posedge clk_i ) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_CONV_MODE) begin
+    if     ( is_tpu_cmd_valid_and_match(SET_CONV_MODE)    ) begin
         mode <= 0;
     end
-    else if(tpu_cmd_valid && tpu_cmd == SET_FIX_MAC_MODE) begin
+    else if( is_tpu_cmd_valid_and_match(SET_FIX_MAC_MODE) ) begin
         mode <= 1;
-        bn_len <= tpu_param_1_in;
     end
-    else if(tpu_cmd_valid && tpu_cmd == SET_MODE) begin
+    else if( is_tpu_cmd_valid_and_match(SET_MODE)         ) begin
         mode <= tpu_param_1_in;
     end
 end
 
 always_ff @( posedge clk_i ) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_PRELOAD) begin
+    if( is_tpu_cmd_valid_and_match(SET_PRELOAD) ) begin
         preload <= tpu_param_1_in;
     end
     
-end
-
-// max pooling
-always_ff @( posedge clk_i ) begin
-    if(rst_i) begin
-        enable_max_pooling <= 0;
-    end
-    else if(tpu_cmd_valid && tpu_cmd == RESET) begin
-        enable_max_pooling <= 0;
-    end
-    else if(tpu_cmd_valid && tpu_cmd == SET_MAX_POOLING) begin
-        enable_max_pooling <= 1;
-    end
 end
 
 // avg pooling
@@ -377,22 +323,19 @@ always_ff @( posedge clk_i ) begin
     if(rst_i) begin
         enable_avg_pooling <= 0;
     end
-    else if(tpu_cmd_valid && tpu_cmd == RESET) begin
+    else if( is_tpu_cmd_valid_and_match(RESET) ) begin
         enable_avg_pooling <= 0;
     end
-    else if(tpu_cmd_valid && tpu_cmd == SET_AVERAGE_POOLING) begin
+    else if( is_tpu_cmd_valid_and_match(SET_AVERAGE_POOLING) ) begin
         enable_avg_pooling <= 1;
     end
 end
 
-
-// error
 always_ff @(posedge clk_i) begin
     tpu_cmd_valid_reg <= tpu_cmd_valid;
     if(tpu_cmd_valid) begin
         tpu_cmd_reg       <= tpu_cmd;  
         param_1_in_reg    <= tpu_param_1_in;
-        // don't update  
         param_2_in_reg    <= tpu_param_2_in;
     end
 end
@@ -405,9 +348,8 @@ always_ff @(posedge clk_i) begin
         curr_state <= next_state;
     end
 end
-//#########################
-//   NEXT STATE LOGIC
-//#########################
+
+// next state logic
 always_comb begin
     case (curr_state)
     IDLE_S: if     ( is_tpu_cmd_valid_and_match(TRIGGER_CONV   ) ) 
@@ -450,7 +392,7 @@ always_comb begin
                 next_state = FMA_WAIT_IDLE_S;
              else
                 next_state = FMA_3_S;
-    FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len && !enable_max_pooling && !enable_avg_pooling)
+    FMA_WAIT_IDLE_S: if(recv_cnt + 4 >= calc_len && !enable_avg_pooling)
                         next_state = IDLE_S;
                      else if(recv_cnt + 4 >= calc_len && enable_avg_pooling)
                         next_state = AVG_POOLING_ACC_S;
@@ -485,7 +427,7 @@ always_ff @( posedge clk_i ) begin
     if(curr_state == IDLE_S || curr_state == NEXT_ROW_S || curr_state == NEXT_COL_S) begin
         K_cnt <= 0;
     end
-    else if(tpu_cmd_valid && tpu_cmd == RESET) begin
+    else if( is_tpu_cmd_valid_and_match(RESET) ) begin
         K_cnt <= 0;
     end
     else if(curr_state == TRIGGER_S || curr_state == TRIGGER_LAST_S) begin
@@ -512,7 +454,7 @@ end
 //#       STORE KMN       #
 //#########################
 always_ff @(posedge clk_i) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_KMN) begin
+    if( is_tpu_cmd_valid_and_match(SET_KMN) ) begin
         if(tpu_param_1_in == 0) begin
             K_reg <= tpu_param_2_in;
         end
@@ -583,7 +525,7 @@ end
 //#   ROW INDEX  START    #
 //#########################
 always_ff @(posedge clk_i) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_ROW_IDX)begin
+    if( is_tpu_cmd_valid_and_match(SET_ROW_IDX) )begin
         row_idx_start[tpu_param_1_in] <= tpu_param_2_in;
     end
 end
@@ -650,7 +592,7 @@ end
 //#   COL INDEX  START    #
 //#########################
 always_ff @(posedge clk_i) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_COL_IDX)begin
+    if( is_tpu_cmd_valid_and_match(SET_COL_IDX) )begin
         col_idx_start[tpu_param_1_in] <= tpu_param_2_in;
     end
 end
@@ -930,7 +872,7 @@ always_ff @(posedge clk_i) begin
                       : (P_status[i] == SW_WRITE  ) ? 0 //tpu_data[i] 
                       : (P_status[i] == TPU_READ  ) ? 0 
                       : (P_status[i] == TPU_WRITE && mode == 0 ) ? bn_fma_out_r[i]
-                      : (P_status[i] == TPU_WRITE && mode == 1 ) ? bn_data_out[i]
+                    //   : (P_status[i] == TPU_WRITE && mode == 1 ) ? bn_data_out[i]
                       : (P_status[i] == DRAM_READ ) ? 0  
                       : (P_status[i] == DRAM_WRITE) ? 0  
                       : 0;
@@ -1002,8 +944,8 @@ end
 //# MATRIX MULTIPLE ENGINE #
 //##########################
 MMU #(
-    .ACLEN(ACLEN), // ADDR_BITS
-    .DATA_WIDTH(DATA_WIDTH)  // DATA_WIDTH
+    .ACLEN(ACLEN),
+    .DATA_WIDTH(DATA_WIDTH)
 )
 M1 (
     .clk_i(clk_i), 
@@ -1030,27 +972,23 @@ M1 (
     .rdata_3_out(rdata_out[2]),
     .rdata_4_out(rdata_out[3]),
 
-    .bn_data_1_in(P_data_out_reg[0]),
-    .bn_data_2_in(P_data_out_reg[1]),
-    .bn_data_3_in(P_data_out_reg[2]),
-    .bn_data_4_in(P_data_out_reg[3]),
+    // .bn_data_1_in(P_data_out_reg[0]),
+    // .bn_data_2_in(P_data_out_reg[1]),
+    // .bn_data_3_in(P_data_out_reg[2]),
+    // .bn_data_4_in(P_data_out_reg[3]),
 
-    .bn_data_1_out(bn_data_out[0]),
-    .bn_data_2_out(bn_data_out[1]),
-    .bn_data_3_out(bn_data_out[2]),
-    .bn_data_4_out(bn_data_out[3]),
-    .bn_valid(bn_valid),
+    // .bn_data_1_out(bn_data_out[0]),
+    // .bn_data_2_out(bn_data_out[1]),
+    // .bn_data_3_out(bn_data_out[2]),
+    // .bn_data_4_out(bn_data_out[3]),
+    // .bn_valid(bn_valid),
 
     .mmu_busy(mmu_busy)
 );
+
 //#########################
 //       SOFTMAX
 //#########################
-always_ff @( posedge clk_i ) begin
-    // if(tpu_cmd_valid && tpu_cmd == SET_DIVISOR) begin
-    //     divisor <= tpu_data_1_in;
-    // end
-end
 always_ff @( posedge clk_i ) begin
     exp_1_out_reg       <= exp_1_out;
     exp_2_out_reg       <= exp_2_out;
@@ -1072,7 +1010,7 @@ end
 floating_point_exp exp_1(
         .aclk(clk_i),
         .s_axis_a_tdata(tpu_param_1_in),
-        .s_axis_a_tvalid(tpu_cmd_valid && tpu_cmd == SET_SOFTMAX),
+        .s_axis_a_tvalid( is_tpu_cmd_valid_and_match(SET_SOFTMAX) ),
         .m_axis_result_tdata(exp_1_out),
         .m_axis_result_tvalid(exp_1_out_valid)
 );
@@ -1080,7 +1018,7 @@ floating_point_exp exp_1(
 floating_point_exp exp_2(
         .aclk(clk_i),
         .s_axis_a_tdata(tpu_param_1_in),
-        .s_axis_a_tvalid(tpu_cmd_valid && tpu_cmd == TRIGGER_SOFTMAX),
+        .s_axis_a_tvalid( is_tpu_cmd_valid_and_match(TRIGGER_SOFTMAX) ),
         .m_axis_result_tdata(exp_2_out),
         .m_axis_result_tvalid(exp_2_out_valid)
 );
@@ -1124,91 +1062,31 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-always_ff @( posedge clk_i ) begin
-    bn_valid_reg <= bn_valid;
-end
-
 //#########################
 //#      LINE BUFFER      #
 //#########################
 
-/*
- * dual port sram
- */
-// global_buffer_dp #(
-// .ADDR_BITS(ADDR_BITS), // ADDR_BITS
-// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-// )
-// gbuff_1 (
-//     .clk_i   (clk_i),
-
-//     .wr_en_1   ((mode) ? 0             : gbuff_wr_en[0]),
-//     .index_1   ((mode) ? sram_r_idx[0] : gbuff_index[0]),
-//     .data_in_1 (gbuff_data_in[0]),
-//     .data_out_1(gbuff_data_out[0]),
-
-//     .index_2((mode) ? sram_r_idx[1] : gbuff_index[1]),
-//     .data_in_2(gbuff_data_in[1]),
-//     .data_out_2(gbuff_data_out[1])
-// );
-
 // first dual port sram control signal
 always_comb begin
-
+    // port 1
     gbuff_wr_en_0     = ((mode) ? 0             : gbuff_wr_en[0]);
     gbuff_index_0     = ((mode) ? sram_r_idx[0] : gbuff_index[0]);
     gbuff_data_in_0   = (gbuff_data_in[0]);
-
-    gbuff_index_1     = ((mode) ? sram_r_idx[1] : gbuff_index[1]);
-        
     gbuff_data_out[0] = gbuff_data_out_0;  
+    // port 2
+    gbuff_index_1     = ((mode) ? sram_r_idx[1] : gbuff_index[1]);
     gbuff_data_out[1] = gbuff_data_out_1;
-
 end
 
-// global_buffer_dp #(
-// .ADDR_BITS(ADDR_BITS), // ADDR_BITS
-// .DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
-// )
-// gbuff_2 (
-//     .clk_i   (clk_i),
-
-//     .wr_en_1   ((mode) ? 0             : gbuff_wr_en[2]),
-//     .index_1   ((mode) ? sram_r_idx[2] : gbuff_index[2]),
-//     .data_in_1 (gbuff_data_in[2]),
-//     .data_out_1(gbuff_data_out[2]),
-
-//     .index_2((mode) ? sram_r_idx[3] : gbuff_index[3]),
-//     .data_in_2(gbuff_data_in[3]),
-//     .data_out_2(gbuff_data_out[3])
-// );
-
-// second dual port sram control signal
-// always_comb begin
-
-//     gbuff_wr_en_2     = ((mode) ? 0             : gbuff_wr_en[2]);
-    
-//     gbuff_index_2     = ((mode) ? sram_r_idx[2] : gbuff_index[2]);
-    
-//     gbuff_data_in_2   = (gbuff_data_in[2]);
-    
-//     gbuff_data_out[2] = gbuff_data_out_2;
-
-//     gbuff_index_3     = ((mode) ? sram_r_idx[3] : gbuff_index[3]);
-    
-//     gbuff_data_in_3   = (gbuff_data_in[3]);
-    
-//     gbuff_data_out[3] = gbuff_data_out_3;
-// end
 // second dual port sram control signal
 always_comb begin
+    // port 1
     gbuff_wr_en_2     = ((mode) ? 0             : gbuff_wr_en[2]);
     gbuff_index_2     = ((mode) ? sram_r_idx[2] : gbuff_index[2]);
     gbuff_data_in_2   = (gbuff_data_in[2]);
-
-    gbuff_index_3     = ((mode) ? sram_r_idx[3] : gbuff_index[3]);
-        
     gbuff_data_out[2] = gbuff_data_out_2;  
+    // port 2
+    gbuff_index_3     = ((mode) ? sram_r_idx[3] : gbuff_index[3]);
     gbuff_data_out[3] = gbuff_data_out_3;
 end
 
@@ -1321,7 +1199,6 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-
 //#########################
 //#   PARTIAL SUM BUFFER  #
 //#########################
@@ -1348,43 +1225,26 @@ for (genvar i = 0; i < 4; i++) begin
 end
 endgenerate
 
-// generate
-// for (genvar i = 0; i < 4; i++) begin
-//     global_buffer #(
-//     .ADDR_BITS(10),
-//     .DATA_BITS(DATA_WIDTH*4)
-//     )
-//     P_gbuff (
-//         .clk_i   (clk_i),
-//         .rst_i   (rst_i),
-//         .wr_en   ((mode) ? fma_out_valid_r[i] : P_wr_en[i]),
-//         .index   ((mode) ? sram_w_idx         : P_index[i]),
-//         .data_in ((mode) ? fma_out_r          : P_data_in[i]),
-//         .data_out(P_data_out[i])
-//     );
-// end
-// endgenerate
-
 /*
  * BatchNorm and skip add ctrl signal
  */
 
 always_ff @( posedge clk_i ) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_RELU) begin
+    if( is_tpu_cmd_valid_and_match(SET_RELU) ) begin
         relu_en <= tpu_param_1_in;
     end
 end
 always_ff @( posedge clk_i ) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_MODE) begin
+    if( is_tpu_cmd_valid_and_match(SET_MODE) ) begin
         calc_len <= tpu_param_2_in;
     end
 end
 
 always_ff @( posedge clk_i ) begin
-    if(tpu_cmd_valid && tpu_cmd == SET_MUL_VAL) begin
+    if( is_tpu_cmd_valid_and_match(SET_MUL_VAL) ) begin
         mul_val_r <= tpu_param_2_in;
     end
-    if(tpu_cmd_valid && tpu_cmd == SET_ADD_VAL) begin
+    if( is_tpu_cmd_valid_and_match(SET_ADD_VAL) ) begin
         add_val_r <= tpu_param_2_in;
     end
 end
@@ -1483,8 +1343,7 @@ generate
     end
 endgenerate
 /*
- * BatchNorm: a * b + c
- * skip add : a * 1 + c
+ * skip connection : a * 1 + c
  */
 always_comb begin
     for (int i = 0; i < 4; i++) begin
@@ -1586,7 +1445,6 @@ floating_point_div div2(
 
 /*
  * BATCHNORM HARDWARE
- * FOLLOW BY GeMM
  */
 // a
 always_comb begin
@@ -1726,15 +1584,15 @@ endgenerate
  * BatchNorm MUL ADD SRAM
  */
 always_comb begin
-    bn_mul_wren[0] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_0);
-    bn_mul_wren[1] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_1);
-    bn_mul_wren[2] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_2);
-    bn_mul_wren[3] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_MUL_SRAM_3);
+    bn_mul_wren[0] = is_tpu_cmd_valid_and_match(SET_BN_MUL_SRAM_0);
+    bn_mul_wren[1] = is_tpu_cmd_valid_and_match(SET_BN_MUL_SRAM_1);
+    bn_mul_wren[2] = is_tpu_cmd_valid_and_match(SET_BN_MUL_SRAM_2);
+    bn_mul_wren[3] = is_tpu_cmd_valid_and_match(SET_BN_MUL_SRAM_3);
 
-    bn_add_wren[0] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_0);
-    bn_add_wren[1] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_1);
-    bn_add_wren[2] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_2);
-    bn_add_wren[3] = (tpu_cmd_valid) && (tpu_cmd == SET_BN_ADD_SRAM_3);
+    bn_add_wren[0] = is_tpu_cmd_valid_and_match(SET_BN_ADD_SRAM_0);
+    bn_add_wren[1] = is_tpu_cmd_valid_and_match(SET_BN_ADD_SRAM_1);
+    bn_add_wren[2] = is_tpu_cmd_valid_and_match(SET_BN_ADD_SRAM_2);
+    bn_add_wren[3] = is_tpu_cmd_valid_and_match(SET_BN_ADD_SRAM_3);
 end
 
 generate
@@ -1798,7 +1656,7 @@ always_ff @( posedge clk_i ) begin
     if(rst_i) begin
         pooling_index_r <= 0;
     end
-    else if(tpu_cmd_valid && tpu_cmd == RESET_POOLING_IDX) begin
+    else if( is_tpu_cmd_valid_and_match(RESET_POOLING_IDX) ) begin
         pooling_index_r <= 0;
     end
     else if(max_pooling_valid) begin
@@ -1810,10 +1668,10 @@ POOLING p1
 (
     .clk_i(clk_i), .rst_i(rst_i),
 
-    .reset_lans(tpu_cmd_valid && tpu_cmd == RESET_LANS),
-    .set_lans_idx(tpu_cmd_valid && tpu_cmd == SET_LANS_IDX),
-    .sram_next(tpu_cmd_valid && tpu_cmd == SRAM_NEXT),
-    .pooling_start(tpu_cmd_valid && tpu_cmd == POOLING_START),
+    .reset_lans   ( is_tpu_cmd_valid_and_match(RESET_LANS   ) ),
+    .set_lans_idx ( is_tpu_cmd_valid_and_match(SET_LANS_IDX ) ),
+    .sram_next    ( is_tpu_cmd_valid_and_match(SRAM_NEXT    ) ),
+    .pooling_start( is_tpu_cmd_valid_and_match(POOLING_START) ),
 
     .bn_valid(curr_state == STORE_S),
     .bn_out_1(bn_fma_out_r[0]),
