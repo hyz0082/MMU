@@ -189,47 +189,8 @@ logic [8:0] sa_in_cnt, sa_forward_cnt;
  * mode: 2 -> skip add
  */
 logic [1 : 0] mode;
-// logic   [DATA_WIDTH*4-1 : 0] bn_data_out [0 : 3];
-// logic bn_valid;
-
-/*
- * BatchNorm and add signal (follow by GeMM)
- * 4x4 FMA (same as GeMM)
- * 4 sram for mul value
- * 4 sram for add value
- */
-// logic   [DATA_WIDTH-1   : 0]  bn_fma_a_data    [0 : 15];
-// logic                         bn_fma_a_valid   [0 : 15];
-// logic   [DATA_WIDTH-1   : 0]  bn_fma_b_data    [0 : 15];
-// logic                         bn_fma_b_valid   [0 : 15];
-// logic   [DATA_WIDTH-1   : 0]  bn_fma_c_data    [0 : 15];
-// logic                         bn_fma_c_valid   [0 : 15];
-// logic   [DATA_WIDTH-1   : 0]  bn_fma_out       [0 : 15];
-// logic   [DATA_WIDTH-1   : 0]  bn_fma_out_relu  [0 : 15];
-// logic                         bn_fma_out_valid [0 : 15];
-// logic                         bn_fma_out_valid_r [0 : 15];
-
-
 logic   [DATA_WIDTH*4-1 : 0]  bn_fma_out_r      [0 : 3];
-
-/*
- * BatchNorm mul & add sram signal
- */
-// logic [3 : 0]       bn_mul_wren;
-// logic [3 : 0]       bn_add_wren;
-// // logic                         bn_source         [0 : 3];
-// logic   [ADDR_BITS-1  : 0]    bn_sram_idx       [0 : 3];
-// logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_in    [0 : 3];
-// logic   [DATA_WIDTH-1 : 0]    bn_add_sram_in    [0 : 3];
-// logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_out   [0 : 3];
-// logic   [DATA_WIDTH-1 : 0]    bn_mul_sram_out_r [0 : 3];
-// logic   [DATA_WIDTH-1 : 0]    bn_add_sram_out   [0 : 3];
-// logic   [DATA_WIDTH-1 : 0]    bn_add_sram_out_r [0 : 3];
-
 logic batchNormResultValid;
-
-// logic   [DATA_WIDTH-1 : 0]    bn_mul_val_r [0 : 3];
-// logic   [DATA_WIDTH-1 : 0]    bn_add_val_r [0 : 3];
 
 /*
  * skip connection signal
@@ -254,8 +215,10 @@ logic   [ADDR_BITS-1    : 0]  send_cnt;
 logic   [ADDR_BITS-1    : 0]  recv_cnt;
 logic   [ADDR_BITS-1    : 0]  calc_len;
 
-logic   [DATA_WIDTH-1 : 0] mul_val_r;
-logic   [DATA_WIDTH-1 : 0] add_val_r;
+logic skipConnectionResultValid;
+
+// logic   [DATA_WIDTH-1 : 0] mul_val_r;
+// logic   [DATA_WIDTH-1 : 0] add_val_r;
 
 
 /*
@@ -1050,14 +1013,14 @@ floating_point_div div(
     );
 
 //#########################
-//    AVG / MAX POOLING
+//    AVG POOLING
 //#########################
 
 /*
  * store BatchNorm output
  */
 always_ff @( posedge clk_i ) begin
-    if(fma_out_valid_r[0]) begin
+    if(skipConnectionResultValid) begin
         pooling_data_r[sram_w_idx*4  ] <= fma_out_r[(DATA_WIDTH*4-1)-:DATA_WIDTH];
         pooling_data_r[sram_w_idx*4+1] <= fma_out_r[(DATA_WIDTH*3-1)-:DATA_WIDTH];
         pooling_data_r[sram_w_idx*4+2] <= fma_out_r[(DATA_WIDTH*2-1)-:DATA_WIDTH];
@@ -1096,12 +1059,9 @@ end
 //#########################
 //#     WEIGHT BUFFER     #
 //#########################
-/*
- * dual port sram
- */
 global_buffer_dp #(
-.ADDR_BITS(14), // ADDR_BITS
-.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+.ADDR_BITS(14),
+.DATA_BITS(DATA_WIDTH)
 )
 weight_1 (
     .clk_i   (clk_i),
@@ -1117,8 +1077,8 @@ weight_1 (
 );
 
 global_buffer_dp #(
-.ADDR_BITS(14), // ADDR_BITS
-.DATA_BITS(DATA_WIDTH)  // DATA_WIDTH
+.ADDR_BITS(14),
+.DATA_BITS(DATA_WIDTH)
 )
 weight_2 (
     .clk_i   (clk_i),
@@ -1215,7 +1175,7 @@ for (genvar i = 0; i < 4; i++) begin
         .clk_i   (clk_i),
         .rst_i   (rst_i),
         .wr_en   ( (mode == 3) ? max_pooling_valid  :
-                   (mode)      ? fma_out_valid_r[i] : P_wr_en[i]),
+                   (mode)      ? skipConnectionResultValid : P_wr_en[i]),
 
         .index   ( (mode == 3) ? pooling_index_r : 
                    (mode)      ? sram_w_idx      : P_index[i]),
@@ -1243,14 +1203,14 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-always_ff @( posedge clk_i ) begin
-    if( is_tpu_cmd_valid_and_match(SET_MUL_VAL) ) begin
-        mul_val_r <= tpu_param_2_in;
-    end
-    if( is_tpu_cmd_valid_and_match(SET_ADD_VAL) ) begin
-        add_val_r <= tpu_param_2_in;
-    end
-end
+// always_ff @( posedge clk_i ) begin
+//     if( is_tpu_cmd_valid_and_match(SET_MUL_VAL) ) begin
+//         mul_val_r <= tpu_param_2_in;
+//     end
+//     if( is_tpu_cmd_valid_and_match(SET_ADD_VAL) ) begin
+//         add_val_r <= tpu_param_2_in;
+//     end
+// end
 
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
@@ -1271,7 +1231,7 @@ always_ff @( posedge clk_i ) begin
     else if(curr_state == IDLE_S) begin
         recv_cnt <= 0;
     end
-    else if(fma_out_valid_r[0]) begin
+    else if(skipConnectionResultValid) begin
         recv_cnt <= recv_cnt + 4;
     end
 end
@@ -1306,85 +1266,99 @@ always_ff @( posedge clk_i ) begin
     else if(curr_state == IDLE_S) begin
         sram_w_idx <= 0;
     end
-    else if(fma_out_valid_r[0] == 1) begin
+    else if(skipConnectionResultValid) begin
         sram_w_idx <= sram_w_idx + 1;
     end
 end
 
-generate
-    always_ff @( posedge clk_i ) begin
-        for (int i = 0; i < 4; i++) begin
-            fma_out_valid_r[i] <= fma_out_valid[i];
-        end
-    end
-endgenerate
+// generate
+//     always_ff @( posedge clk_i ) begin
+//         for (int i = 0; i < 4; i++) begin
+//             fma_out_valid_r[i] <= fma_out_valid[i];
+//         end
+//     end
+// endgenerate
 
-// should be nonblocking
-generate
-    always_comb begin
-        for (int i = 0; i < 4; i++) begin
-            if(fma_out[i][15]) begin
-                fma_out_relu[i] = 0;
-            end
-            else begin
-                fma_out_relu[i] = fma_out[i];
-            end
-        end
-    end
-endgenerate
+// generate
+//     always_comb begin
+//         for (int i = 0; i < 4; i++) begin
+//             if(fma_out[i][15]) begin
+//                 fma_out_relu[i] = 0;
+//             end
+//             else begin
+//                 fma_out_relu[i] = fma_out[i];
+//             end
+//         end
+//     end
+// endgenerate
 
-generate
-    always_ff @( posedge clk_i ) begin
-        if(fma_out_valid[0] && !relu_en) begin
-            fma_out_r <= {fma_out[0], fma_out[1], 
-                          fma_out[2], fma_out[3]};
-        end
-        else if(fma_out_valid[0] && relu_en) begin
-            fma_out_r <= {fma_out_relu[0], fma_out_relu[1], 
-                          fma_out_relu[2], fma_out_relu[3]};
-        end
-    end
-endgenerate
-/*
- * skip connection : a * 1 + c
- */
-always_comb begin
-    for (int i = 0; i < 4; i++) begin
-        fma_a_data[i] = gbuff_data_out_reg[i];
-        fma_b_data[i] = (mode == 1) ? mul_val_r : 16'h3c00;
-        fma_c_data[i] = (mode == 1) ? add_val_r : weight_out_reg[i];
+// generate
+//     always_ff @( posedge clk_i ) begin
+//         if(fma_out_valid[0] && !relu_en) begin
+//             fma_out_r <= {fma_out[0], fma_out[1], 
+//                           fma_out[2], fma_out[3]};
+//         end
+//         else if(fma_out_valid[0] && relu_en) begin
+//             fma_out_r <= {fma_out_relu[0], fma_out_relu[1], 
+//                           fma_out_relu[2], fma_out_relu[3]};
+//         end
+//     end
+// endgenerate
+// /*
+//  * skip connection : a * 1 + c
+//  */
+// always_comb begin
+//     for (int i = 0; i < 4; i++) begin
+//         fma_a_data[i] = gbuff_data_out_reg[i];
+//         fma_b_data[i] = 16'h3c00;
+//         fma_c_data[i] = weight_out_reg[i];
 
-        fma_a_valid[i] = (curr_state == FMA_3_S/**/);
-        fma_b_valid[i] = (curr_state == FMA_3_S/**/);
-        fma_c_valid[i] = (curr_state == FMA_3_S/**/);
-    end     
-end
+//         fma_a_valid[i] = (curr_state == FMA_3_S);
+//         fma_b_valid[i] = (curr_state == FMA_3_S);
+//         fma_c_valid[i] = (curr_state == FMA_3_S);
+//     end     
+// end
 
-/*
- * BatchNorm and skip add ip
- */
+// /*
+//  * skip connection ip
+//  */
+// generate
+// for (genvar i = 0; i < 4; i++) begin
+//     floating_point_0 FP(
 
-generate
-for (genvar i = 0; i < 4; i++) begin
-    floating_point_0 FP(
+//         .aclk(clk_i),
 
-        .aclk(clk_i),
+//         .s_axis_a_tdata(fma_a_data[i]),
+//         .s_axis_a_tvalid(fma_a_valid[i]),
 
-        .s_axis_a_tdata(fma_a_data[i]),
-        .s_axis_a_tvalid(fma_a_valid[i]),
+//         .s_axis_b_tdata(fma_b_data[i]),
+//         .s_axis_b_tvalid(fma_b_valid[i]),
 
-        .s_axis_b_tdata(fma_b_data[i]),
-        .s_axis_b_tvalid(fma_b_valid[i]),
+//         .s_axis_c_tdata(fma_c_data[i]),
+//         .s_axis_c_tvalid(fma_c_valid[i]),
 
-        .s_axis_c_tdata(fma_c_data[i]),
-        .s_axis_c_tvalid(fma_c_valid[i]),
+//         .m_axis_result_tdata(fma_out[i]),
+//         .m_axis_result_tvalid(fma_out_valid[i])
+//     );
+// end
+// endgenerate
 
-        .m_axis_result_tdata(fma_out[i]),
-        .m_axis_result_tvalid(fma_out_valid[i])
-    );
-end
-endgenerate
-
+SKIPCONNECTION #(
+    .ACLEN(ACLEN),
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_WIDTH(DATA_WIDTH)
+) sc1
+(
+    .clk_i(clk_i), .rst_i(rst_i),
+    .relu_en(relu_en),
+    //
+    .skipConnectionInputValid((curr_state == FMA_3_S)),
+    .skipConnectionInput_1(gbuff_data_out_reg),
+    .skipConnectionInput_2(weight_out_reg),
+    // 
+    .skipConnectionResultValid(skipConnectionResultValid),
+    .skipConnectionResult_r(fma_out_r)
+);
 
 /*
  * avg pooling 
@@ -1404,7 +1378,7 @@ end
 assign ret_avg_pooling = pooling_result;
 
 /*
- * acc ip 
+ * avg pooling ip 
  */
 assign acc_data_in = pooling_data_r[pooling_index];
 assign acc_data_in_valid = (curr_state == AVG_POOLING_ACC_S);
@@ -1451,10 +1425,10 @@ floating_point_div div2(
  */
 
 BATCHNORM #(
-.ACLEN(ACLEN),
-.ADDR_BITS(ADDR_BITS),
-.DATA_WIDTH(DATA_WIDTH)
-)
+    .ACLEN(ACLEN),
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_WIDTH(DATA_WIDTH)
+) bn1
 (
     .clk_i(clk_i), .rst_i(rst_i),
     // cmd
@@ -1472,8 +1446,6 @@ BATCHNORM #(
     .batchNormResultValid(batchNormResultValid),
     .batchNormResult_r(bn_fma_out_r)
 );
-
-
 
 /*
  * max pooling
