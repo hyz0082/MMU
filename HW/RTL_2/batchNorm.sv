@@ -1,9 +1,5 @@
 `timescale 1ns / 1ps
 
-// perform max pooling operation (3x3 stride=2, padding=1)
-// read 112 data and replace one lane each time
-// send 56 results back tp tpu
-
 module BATCHNORM
 #(parameter ACLEN=8,
   parameter ADDR_BITS=16,
@@ -16,17 +12,22 @@ module BATCHNORM
     input   logic   [ACLEN-1 : 0]        tpu_cmd,
     input   logic   [DATA_WIDTH-1 : 0]   tpu_param_1_in, 
     input   logic   [DATA_WIDTH-1 : 0]   tpu_param_2_in,
-    intput  logic                        relu_en,
+    input   logic                        relu_en,
     input   logic                        batchNormSramIdxRst,
     input   logic                        batchNormSramIdxInc,
     // convolution result
-    intput logic                        convolutionResultValid,
+    input logic                         convolutionResultValid,
     input  logic   [DATA_WIDTH*4-1 : 0] rdata_out [0 : 3],
     // batchNorm Result
     output logic                        batchNormResultValid,
     output logic   [DATA_WIDTH*4-1 : 0] batchNormResult_r [0 : 3]
 );
 `include "tpu_cmd.svh"
+function logic is_tpu_cmd_valid_and_match(input logic [ACLEN-1 : 0] cmd_type);
+    return (tpu_cmd_valid && tpu_cmd == cmd_type);
+endfunction
+
+
 logic   [DATA_WIDTH-1   : 0]  bn_fma_a_data    [0 : 15];
 logic                         bn_fma_a_valid   [0 : 15];
 logic   [DATA_WIDTH-1   : 0]  bn_fma_b_data    [0 : 15];
@@ -58,6 +59,7 @@ logic   [DATA_WIDTH-1 : 0]    bn_mul_val_r [0 : 3];
 logic   [DATA_WIDTH-1 : 0]    bn_add_val_r [0 : 3];
 
 
+assign batchNormResultValid = bn_fma_out_valid[0];
 
 /*
  * BATCHNORM HARDWARE
@@ -124,9 +126,9 @@ end
 generate
     always_comb begin 
         for(int i = 0; i < 16; i++) begin
-            bn_fma_a_valid[i] = conv_valid;//(curr_state == START_BATCHNORM_S);
-            bn_fma_b_valid[i] = conv_valid;//(curr_state == START_BATCHNORM_S);
-            bn_fma_c_valid[i] = conv_valid;//(curr_state == START_BATCHNORM_S);
+            bn_fma_a_valid[i] = convolutionResultValid;//(curr_state == START_BATCHNORM_S);
+            bn_fma_b_valid[i] = convolutionResultValid;//(curr_state == START_BATCHNORM_S);
+            bn_fma_c_valid[i] = convolutionResultValid;//(curr_state == START_BATCHNORM_S);
         end
     end
 endgenerate
@@ -174,23 +176,23 @@ endgenerate
 generate
     always_ff @( posedge clk_i ) begin
         if(bn_fma_out_valid[0] && !relu_en) begin
-            bn_fma_out_r[0] <= {bn_fma_out[ 0], bn_fma_out[ 4], 
+            batchNormResult_r[0] <= {bn_fma_out[ 0], bn_fma_out[ 4], 
                                 bn_fma_out[ 8], bn_fma_out[12]};
-            bn_fma_out_r[1] <= {bn_fma_out[ 1], bn_fma_out[ 5], 
+            batchNormResult_r[1] <= {bn_fma_out[ 1], bn_fma_out[ 5], 
                                 bn_fma_out[ 9], bn_fma_out[13]};
-            bn_fma_out_r[2] <= {bn_fma_out[ 2], bn_fma_out[ 6], 
+            batchNormResult_r[2] <= {bn_fma_out[ 2], bn_fma_out[ 6], 
                                 bn_fma_out[10], bn_fma_out[14]};
-            bn_fma_out_r[3] <= {bn_fma_out[ 3], bn_fma_out[ 7], 
+            batchNormResult_r[3] <= {bn_fma_out[ 3], bn_fma_out[ 7], 
                                 bn_fma_out[11], bn_fma_out[15]};
         end
         else if(bn_fma_out_valid[0] && relu_en) begin
-            bn_fma_out_r[0] <= {bn_fma_out_relu[ 0], bn_fma_out_relu[ 4], 
+            batchNormResult_r[0] <= {bn_fma_out_relu[ 0], bn_fma_out_relu[ 4], 
                                 bn_fma_out_relu[ 8], bn_fma_out_relu[12]};
-            bn_fma_out_r[1] <= {bn_fma_out_relu[ 1], bn_fma_out_relu[ 5], 
+            batchNormResult_r[1] <= {bn_fma_out_relu[ 1], bn_fma_out_relu[ 5], 
                                 bn_fma_out_relu[ 9], bn_fma_out_relu[13]};
-            bn_fma_out_r[2] <= {bn_fma_out_relu[ 2], bn_fma_out_relu[ 6], 
+            batchNormResult_r[2] <= {bn_fma_out_relu[ 2], bn_fma_out_relu[ 6], 
                                 bn_fma_out_relu[10], bn_fma_out_relu[14]};
-            bn_fma_out_r[3] <= {bn_fma_out_relu[ 3], bn_fma_out_relu[ 7], 
+            batchNormResult_r[3] <= {bn_fma_out_relu[ 3], bn_fma_out_relu[ 7], 
                                 bn_fma_out_relu[11], bn_fma_out_relu[15]};
         end
     end
