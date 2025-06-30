@@ -195,17 +195,19 @@ logic batchNormResultValid;
 /*
  * skip connection signal
  */
-logic   [DATA_WIDTH-1   : 0]  fma_a_data  [0 : 3];
-logic                         fma_a_valid [0 : 3];
-logic   [DATA_WIDTH-1   : 0]  fma_b_data  [0 : 3];
-logic                         fma_b_valid [0 : 3];
-logic   [DATA_WIDTH-1   : 0]  fma_c_data  [0 : 3];
-logic                         fma_c_valid [0 : 3];
-logic   [DATA_WIDTH-1   : 0]  fma_out        [0 : 3];
-logic   [DATA_WIDTH-1   : 0]  fma_out_relu   [0 : 3];
-logic                         fma_out_valid   [0 : 3];
-logic                         fma_out_valid_r [0 : 3];
+// logic   [DATA_WIDTH-1   : 0]  fma_a_data  [0 : 3];
+// logic                         fma_a_valid [0 : 3];
+// logic   [DATA_WIDTH-1   : 0]  fma_b_data  [0 : 3];
+// logic                         fma_b_valid [0 : 3];
+// logic   [DATA_WIDTH-1   : 0]  fma_c_data  [0 : 3];
+// logic                         fma_c_valid [0 : 3];
+// logic   [DATA_WIDTH-1   : 0]  fma_out        [0 : 3];
+// logic   [DATA_WIDTH-1   : 0]  fma_out_relu   [0 : 3];
+// logic                         fma_out_valid   [0 : 3];
+// logic                         fma_out_valid_r [0 : 3];
+
 logic   [DATA_WIDTH*4-1 : 0]  fma_out_r;
+
 logic   [ADDR_BITS-1    : 0]  sram_r_idx [0 : 3];
 logic   [ADDR_BITS-1    : 0]  sram_w_idx;
 
@@ -365,14 +367,14 @@ always_comb begin
                      else
                         next_state = FMA_WAIT_IDLE_S;
     AVG_POOLING_ACC_S:  if(pooling_index == 48)
-                            next_state = WAIT_AVG_POOLING_ACC_S;
+                            next_state = WAIT_AVG_POOLING_DIV_S;//WAIT_AVG_POOLING_ACC_S;
                         else 
                             next_state = AVG_POOLING_ACC_S;
-    WAIT_AVG_POOLING_ACC_S: if(acc_recv_cnt == 49)
-                                next_state = AVG_POOLING_DIV_S;
-                            else
-                                next_state = WAIT_AVG_POOLING_ACC_S;
-    AVG_POOLING_DIV_S: next_state = WAIT_AVG_POOLING_DIV_S;
+    // WAIT_AVG_POOLING_ACC_S: if(acc_recv_cnt == 49)
+    //                             next_state = AVG_POOLING_DIV_S;
+    //                         else
+    //                             next_state = WAIT_AVG_POOLING_ACC_S;
+    // AVG_POOLING_DIV_S: next_state = WAIT_AVG_POOLING_DIV_S;
     WAIT_AVG_POOLING_DIV_S: if(div_data_valid) next_state = IDLE_S;
                             else next_state = WAIT_AVG_POOLING_DIV_S;
     WAIT_SF_ACC_S: if(exp_acc_valid) next_state = IDLE_S;
@@ -938,17 +940,6 @@ M1 (
     .rdata_3_out(rdata_out[2]),
     .rdata_4_out(rdata_out[3]),
 
-    // .bn_data_1_in(P_data_out_reg[0]),
-    // .bn_data_2_in(P_data_out_reg[1]),
-    // .bn_data_3_in(P_data_out_reg[2]),
-    // .bn_data_4_in(P_data_out_reg[3]),
-
-    // .bn_data_1_out(bn_data_out[0]),
-    // .bn_data_2_out(bn_data_out[1]),
-    // .bn_data_3_out(bn_data_out[2]),
-    // .bn_data_4_out(bn_data_out[3]),
-    // .bn_valid(bn_valid),
-
     .mmu_busy(mmu_busy)
 );
 
@@ -1203,15 +1194,6 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-// always_ff @( posedge clk_i ) begin
-//     if( is_tpu_cmd_valid_and_match(SET_MUL_VAL) ) begin
-//         mul_val_r <= tpu_param_2_in;
-//     end
-//     if( is_tpu_cmd_valid_and_match(SET_ADD_VAL) ) begin
-//         add_val_r <= tpu_param_2_in;
-//     end
-// end
-
 always_ff @( posedge clk_i ) begin
     if(rst_i) begin
         send_cnt <= 0;
@@ -1271,78 +1253,6 @@ always_ff @( posedge clk_i ) begin
     end
 end
 
-// generate
-//     always_ff @( posedge clk_i ) begin
-//         for (int i = 0; i < 4; i++) begin
-//             fma_out_valid_r[i] <= fma_out_valid[i];
-//         end
-//     end
-// endgenerate
-
-// generate
-//     always_comb begin
-//         for (int i = 0; i < 4; i++) begin
-//             if(fma_out[i][15]) begin
-//                 fma_out_relu[i] = 0;
-//             end
-//             else begin
-//                 fma_out_relu[i] = fma_out[i];
-//             end
-//         end
-//     end
-// endgenerate
-
-// generate
-//     always_ff @( posedge clk_i ) begin
-//         if(fma_out_valid[0] && !relu_en) begin
-//             fma_out_r <= {fma_out[0], fma_out[1], 
-//                           fma_out[2], fma_out[3]};
-//         end
-//         else if(fma_out_valid[0] && relu_en) begin
-//             fma_out_r <= {fma_out_relu[0], fma_out_relu[1], 
-//                           fma_out_relu[2], fma_out_relu[3]};
-//         end
-//     end
-// endgenerate
-// /*
-//  * skip connection : a * 1 + c
-//  */
-// always_comb begin
-//     for (int i = 0; i < 4; i++) begin
-//         fma_a_data[i] = gbuff_data_out_reg[i];
-//         fma_b_data[i] = 16'h3c00;
-//         fma_c_data[i] = weight_out_reg[i];
-
-//         fma_a_valid[i] = (curr_state == FMA_3_S);
-//         fma_b_valid[i] = (curr_state == FMA_3_S);
-//         fma_c_valid[i] = (curr_state == FMA_3_S);
-//     end     
-// end
-
-// /*
-//  * skip connection ip
-//  */
-// generate
-// for (genvar i = 0; i < 4; i++) begin
-//     floating_point_0 FP(
-
-//         .aclk(clk_i),
-
-//         .s_axis_a_tdata(fma_a_data[i]),
-//         .s_axis_a_tvalid(fma_a_valid[i]),
-
-//         .s_axis_b_tdata(fma_b_data[i]),
-//         .s_axis_b_tvalid(fma_b_valid[i]),
-
-//         .s_axis_c_tdata(fma_c_data[i]),
-//         .s_axis_c_tvalid(fma_c_valid[i]),
-
-//         .m_axis_result_tdata(fma_out[i]),
-//         .m_axis_result_tvalid(fma_out_valid[i])
-//     );
-// end
-// endgenerate
-
 SKIPCONNECTION #(
     .ACLEN(ACLEN),
     .ADDR_BITS(ADDR_BITS),
@@ -1380,45 +1290,62 @@ assign ret_avg_pooling = pooling_result;
 /*
  * avg pooling ip 
  */
-assign acc_data_in = pooling_data_r[pooling_index];
-assign acc_data_in_valid = (curr_state == AVG_POOLING_ACC_S);
-assign acc_data_in_last = (pooling_index == 48);
+// assign acc_data_in = pooling_data_r[pooling_index];
+// assign acc_data_in_valid = (curr_state == AVG_POOLING_ACC_S);
+// assign acc_data_in_last = (pooling_index == 48);
 
-always_ff @( posedge clk_i ) begin
-    if(rst_i)                     acc_recv_cnt <= 0;
-    else if(curr_state == IDLE_S) acc_recv_cnt <= 0;
-    else if(acc_data_out_valid)   acc_recv_cnt <= acc_recv_cnt + 1;
-end
+// always_ff @( posedge clk_i ) begin
+//     if(rst_i)                     acc_recv_cnt <= 0;
+//     else if(curr_state == IDLE_S) acc_recv_cnt <= 0;
+//     else if(acc_data_out_valid)   acc_recv_cnt <= acc_recv_cnt + 1;
+// end
 
-always_ff @( posedge clk_i ) begin
-    if(acc_data_out_valid)  pooling_result <= acc_data_out;
-    else if(div_data_valid) pooling_result <= div_data_out;
-end
+// always_ff @( posedge clk_i ) begin
+//     if(acc_data_out_valid)  pooling_result <= acc_data_out;
+//     else if(div_data_valid) pooling_result <= div_data_out;
+// end
 
-floating_point_acc ACC2(
+// floating_point_acc ACC2(
 
-    .aclk(clk_i),
+//     .aclk(clk_i),
 
-    .s_axis_a_tdata(acc_data_in),
-    .s_axis_a_tlast(acc_data_in_last),
-    .s_axis_a_tvalid(acc_data_in_valid),
+//     .s_axis_a_tdata(acc_data_in),
+//     .s_axis_a_tlast(acc_data_in_last),
+//     .s_axis_a_tvalid(acc_data_in_valid),
 
-    .m_axis_result_tdata(acc_data_out),
-    .m_axis_result_tlast(acc_data_out_last),
-    .m_axis_result_tvalid(acc_data_out_valid)
+//     .m_axis_result_tdata(acc_data_out),
+//     .m_axis_result_tlast(acc_data_out_last),
+//     .m_axis_result_tvalid(acc_data_out_valid)
+// );
+// /*
+//  * div ip
+//  */
+// floating_point_div div2(
+//         .aclk(clk_i),
+//         .s_axis_a_tdata(pooling_result),
+//         .s_axis_a_tvalid((curr_state == AVG_POOLING_DIV_S)),
+//         .s_axis_b_tdata(16'h5220), // 49
+//         .s_axis_b_tvalid(1),
+//         .m_axis_result_tdata(div_data_out),
+//         .m_axis_result_tvalid(div_data_valid)
+//     );
+
+AVGPOOLING #(
+    .ACLEN(ACLEN),
+    .ADDR_BITS(ADDR_BITS),
+    .DATA_WIDTH(DATA_WIDTH)
+) avg1
+(
+    .clk_i(clk_i), .rst_i(rst_i),
+    //
+    .avgPoolingInputValid((curr_state == AVG_POOLING_ACC_S)),
+    .avgPoolingInputLast((pooling_index == 48)),
+    .avgPoolingInput(pooling_data_r[pooling_index]),
+    // batchNorm Result
+    .avgPoolingResultValid(div_data_valid),
+    .avgPoolingResult_r(pooling_result)
 );
-/*
- * div ip
- */
-floating_point_div div2(
-        .aclk(clk_i),
-        .s_axis_a_tdata(pooling_result),
-        .s_axis_a_tvalid((curr_state == AVG_POOLING_DIV_S)),
-        .s_axis_b_tdata(16'h5220), // 49
-        .s_axis_b_tvalid(1),
-        .m_axis_result_tdata(div_data_out),
-        .m_axis_result_tvalid(div_data_valid)
-    );
+
 
 /*
  * BATCHNORM HARDWARE
