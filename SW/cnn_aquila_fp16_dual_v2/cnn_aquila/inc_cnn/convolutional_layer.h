@@ -302,7 +302,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     preprocess_time = (clock() - tick)/ticks_per_msec;
 
     if(conv_cnt == 0)
-    for (int o = start; o < end; o += weight_num * 1)
+    for (int o = start; o < end; o += weight_num * 4)
     {
         // printf("[%s]: %d/%d\n", entry->base.layer_name_, (int)(o + 1), (int)end);
         
@@ -316,18 +316,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         int second_core_en, third_core_en, fourth_core_en;
 
-        // second_core_en = 1;
-        second_core_en = 0;
+        second_core_en = 1;
+        // second_core_en = 0;
         o_2 = o + weight_num;
         // remain_oc_2 = min(weight_num, end - o_2);
 
-        // third_core_en = 1;
-        third_core_en = 0;
+        third_core_en = 1;
+        // third_core_en = 0;
         o_3 = o_2 + weight_num;
         remain_oc_3 = min(weight_num, end - o_3);
 
-        // fourth_core_en = 1;
-        fourth_core_en = 0;
+        fourth_core_en = 1;
+        // fourth_core_en = 0;
         o_4 = o_3 + weight_num;
         remain_oc_4 = min(weight_num, end - o_4);
 
@@ -339,16 +339,19 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         int offset_w = (weight_.height_ * (in_.depth_ * o)) * weight_.width_;
         const my_float_t * ppw = W + offset_w;
         uint32_t tmp_s, tmp_s_2;
-        memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        tmp_s = (int)ppw;
         read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                              remain_oc, tmp_s);
         
         // read batchNorm weight from dram
         int batchNormIndex = 0;
         ppw = batchNorm_W + o;
-        memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        tmp_s = (int)ppw;
         ppw = batchNorm_W + out_.depth_ + o;
-        memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+        tmp_s_2 = (int)ppw;
         read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
         set_dram_read_weight_cmd();
         
@@ -360,15 +363,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_2)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc, tmp_s);
             
             // read batchNorm weight
             ppw = batchNorm_W + o_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_2;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             set_dram_read_weight_cmd();
         }
@@ -381,15 +387,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_3)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_3, tmp_s);
             
             // read batchNorm weight
             ppw = batchNorm_W + o_3;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_3;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             set_dram_read_weight_cmd();
         }
@@ -401,15 +410,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_4)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_4, tmp_s);
             
             // read batchNorm weight
             ppw = batchNorm_W + o_4;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_4;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             set_dram_read_weight_cmd();
         }
@@ -447,7 +459,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_i = (in_.width_ * (curr_h));
             my_float_t *pi = in + offset_i;
             uint32_t tmp_s;
-            memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            // memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            tmp_s = (int)pi;
 
             if(h == 0) {
                 set_currinputtype_cmd(0);
@@ -529,7 +542,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_output_recv_cnt_cmd(0);
                     uint32_t tmp_s;
                     pa = pa + conv_0_offset;
-                    memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    tmp_s = (int)pa;
                     set_dram_write_addr_cmd(s%4, tmp_s);
                     set_dram_w_tr_cmd();
                     wait_idle_quick_cmd();
@@ -544,7 +558,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                         set_output_recv_cnt_cmd(0);
                         uint32_t tmp_s;
                         pa = pa + conv_0_offset;
-                        memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        tmp_s = (int)pa;
                         set_dram_write_addr_cmd(s%4, tmp_s);
                         set_dram_w_tr_cmd();
                         wait_idle_2_quick_cmd();
@@ -562,7 +577,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                         set_output_recv_cnt_cmd(0);
                         uint32_t tmp_s;
                         pa = pa + conv_0_offset;
-                        memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        tmp_s = (int)pa;
                         set_dram_write_addr_cmd(s%4, tmp_s);
                         set_dram_w_tr_cmd();
                         wait_idle_3_quick_cmd();
@@ -580,7 +596,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                         set_output_recv_cnt_cmd(0);
                         uint32_t tmp_s;
                         pa = pa + conv_0_offset;
-                        memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                        tmp_s = (int)pa;
                         set_dram_write_addr_cmd(s%4, tmp_s);
                         set_dram_w_tr_cmd();
                         wait_idle_4_quick_cmd();
@@ -594,7 +611,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     }
     // for 3x3 kernel, paddingSize = 1
     else if (weight_.height_ == 3)
-    for (int o = start; o < end; o += weight_num * 1)
+    for (int o = start; o < end; o += weight_num * 4)
     {
         // printf("[%s]: %d/%d\n", entry->base.layer_name_, (int)(o + 1), (int)end);
         
@@ -604,18 +621,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         int second_core_en, third_core_en, fourth_core_en;
 
-        // second_core_en = 1;
-        second_core_en = 0;
+        second_core_en = 1;
+        // second_core_en = 0;
         o_2 = o + weight_num;
         remain_oc_2 = min(weight_num, end - o_2);
 
-        // third_core_en = 1;
-        third_core_en = 0;
+        third_core_en = 1;
+        // third_core_en = 0;
         o_3 = o_2 + weight_num;
         remain_oc_3 = min(weight_num, end - o_3);
 
-        // fourth_core_en = 1;
-        fourth_core_en = 0;
+        fourth_core_en = 1;
+        // fourth_core_en = 0;
         o_4 = o_3 + weight_num;
         remain_oc_4 = min(weight_num, end - o_4);
 
@@ -625,16 +642,19 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         int offset_w = (weight_.height_ * (in_.depth_ * o)) * weight_.width_;
         const my_float_t * ppw = W + offset_w;
         uint32_t tmp_s, tmp_s_2;
-        memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        tmp_s = (int)ppw;
         read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                              remain_oc, tmp_s);
 
         // read first batchNorm weight
         int batchNormIndex = 0;
         ppw = batchNorm_W + o;
-        memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        tmp_s = (int)ppw;
         ppw = batchNorm_W + out_.depth_ + o;
-        memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+        tmp_s_2 = (int)ppw;
         read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
         set_dram_read_weight_cmd();
         
@@ -645,7 +665,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_2)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_2, tmp_s);
             wait_idle_2_quick_cmd();
@@ -653,9 +674,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             // read second batchNorm weight
             batchNormIndex = 0;
             ppw = batchNorm_W + o_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_2;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             set_dram_read_weight_cmd();
         }
@@ -667,7 +690,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_3)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_3, tmp_s);
             wait_idle_3_quick_cmd();
@@ -675,9 +699,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             // read third batchNorm weight
             batchNormIndex = 0;
             ppw = batchNorm_W + o_3;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_3;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_3_quick_cmd();
             set_dram_read_weight_cmd();
@@ -690,7 +716,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_4)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_4, tmp_s);
             wait_idle_4_quick_cmd();
@@ -698,9 +725,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             // read fourth batchNorm weight
             batchNormIndex = 0;
             ppw = batchNorm_W + o_4;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_4;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_4_quick_cmd();
             set_dram_read_weight_cmd();
@@ -762,7 +791,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_i = (in_.width_ * (curr_h));
             my_float_t *pi = in + offset_i;
             uint32_t tmp_s;
-            memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            // memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            tmp_s = (int)pi;
 
             read_conv_input_cmd(in_.depth_, in_.width_ * in_.height_ * 2,
                                 tmp_s);
@@ -790,9 +820,9 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 set_output_recv_cnt_cmd(base_idx);
                 int tmp_s;
                 pa = pa + output_offset;
-                memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                tmp_s = (int)pa;
                 set_dram_write_addr_cmd(s%4, tmp_s);
-
                 set_dram_w_tr_cmd();
                 wait_idle_quick_cmd();
             }
@@ -812,7 +842,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_output_recv_cnt_cmd(base_idx);
                     uint32_t tmp_s;
                     pa = pa + output_offset;
-                    memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    tmp_s = (int)pa;
                     set_dram_write_addr_cmd(s%4, tmp_s);
 
                     set_dram_w_tr_cmd();
@@ -835,7 +866,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_output_recv_cnt_cmd(base_idx);
                     uint32_t tmp_s;
                     pa = pa + output_offset;
-                    memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    tmp_s = (int)pa;
                     set_dram_write_addr_cmd(s%4, tmp_s);
 
                     set_dram_w_tr_cmd();
@@ -858,7 +890,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_output_recv_cnt_cmd(base_idx);
                     uint32_t tmp_s;
                     pa = pa + output_offset;
-                    memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    tmp_s = (int)pa;
                     set_dram_write_addr_cmd(s%4, tmp_s);
 
                     set_dram_w_tr_cmd();
@@ -873,7 +906,7 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
     }
     // for 1x1 convolution
     else
-    for (int o = start; o < end; o += weight_num * 1)
+    for (int o = start; o < end; o += weight_num * 4)
     {
         // printf("[%s]: %d/%d\n", entry->base.layer_name_, (int)(o + 1), (int)end);
         
@@ -883,18 +916,18 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         
         int second_core_en, third_core_en, fourth_core_en;
 
-        // second_core_en = 1;
-        second_core_en = 0;
+        second_core_en = 1;
+        // second_core_en = 0;
         o_2 = o + weight_num;
         remain_oc_2 = min(weight_num, end - o_2);
 
-        // third_core_en = 1;
-        third_core_en = 0;
+        third_core_en = 1;
+        // third_core_en = 0;
         o_3 = o_2 + weight_num;
         remain_oc_3 = min(weight_num, end - o_3);
 
-        // fourth_core_en = 1;
-        fourth_core_en = 0;
+        fourth_core_en = 1;
+        // fourth_core_en = 0;
         o_4 = o_3 + weight_num;
         remain_oc_4 = min(weight_num, end - o_4);
 
@@ -905,16 +938,19 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
         int offset_w = (weight_.height_ * (in_.depth_ * o)) * weight_.width_;
         const my_float_t * ppw = W + offset_w;
         uint32_t tmp_s, tmp_s_2;
-        memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        tmp_s = (int)ppw;
         read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                              remain_oc, tmp_s);
 
         // read first batchNorm weight
         int batchNormIndex = 0;
         ppw = batchNorm_W + o;
-        memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+        tmp_s = (int)ppw;
         ppw = batchNorm_W + out_.depth_ + o;
-        memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+        // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+        tmp_s_2 = (int)ppw;
         read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
         set_dram_read_weight_cmd();
         
@@ -925,16 +961,19 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_2)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_2, tmp_s);
             
             // read second batchNorm weight
             batchNormIndex = 0;
             ppw = batchNorm_W + o_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_2;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             set_dram_read_weight_cmd();
         }
@@ -946,7 +985,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_3)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_3, tmp_s);
             wait_idle_3_quick_cmd();
@@ -954,9 +994,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             // read third batchNorm weight
             batchNormIndex = 0;
             ppw = batchNorm_W + o_3;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_3;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_3_quick_cmd();
             set_dram_read_weight_cmd();
@@ -969,7 +1011,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_w = (weight_.height_ * (in_.depth_ * o_4)) * weight_.width_;
             const my_float_t * ppw = W + offset_w;
             uint32_t tmp_s, tmp_s_2;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             read_conv_weight_cmd(weight_.height_ * weight_.width_ * in_.depth_, 
                                 remain_oc_4, tmp_s);
             wait_idle_4_quick_cmd();
@@ -977,9 +1020,11 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             // read fourth batchNorm weight
             batchNormIndex = 0;
             ppw = batchNorm_W + o_4;
-            memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s, &ppw, sizeof(tmp_s));
+            tmp_s = (int)ppw;
             ppw = batchNorm_W + out_.depth_ + o_4;
-            memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            // memcpy(&tmp_s_2, &ppw, sizeof(tmp_s));
+            tmp_s_2 = (int)ppw;
             read_batchNorm_weight_cmd(remain_oc, tmp_s, tmp_s_2);
             wait_idle_4_quick_cmd();
             set_dram_read_weight_cmd();
@@ -1016,7 +1061,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
             int offset_i = (in_.width_ * (curr_h));
             my_float_t *pi = in + offset_i;
             uint32_t tmp_s;
-            memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            // memcpy(&tmp_s, &pi, sizeof(tmp_s));
+            tmp_s = (int)pi;
 
             read_conv_input_cmd(in_.depth_, in_.width_ * in_.height_*2,
                                 tmp_s);
@@ -1040,9 +1086,9 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                 set_output_recv_cnt_cmd(base_idx);
                 int tmp_s;
                 pa = pa + output_offset;
-                memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                tmp_s = (int)pa;
                 set_dram_write_addr_cmd(s%4, tmp_s);
-
                 set_dram_w_tr_cmd();
                 wait_idle_quick_cmd();
             }
@@ -1062,7 +1108,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_output_recv_cnt_cmd(base_idx);
                     uint32_t tmp_s;
                     pa = pa + output_offset;
-                    memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    tmp_s = (int)pa;
                     set_dram_write_addr_cmd(s%4, tmp_s);
 
                     set_dram_w_tr_cmd();
@@ -1085,7 +1132,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_output_recv_cnt_cmd(base_idx);
                     uint32_t tmp_s;
                     pa = pa + output_offset;
-                    memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    tmp_s = (int)pa;
                     set_dram_write_addr_cmd(s%4, tmp_s);
 
                     set_dram_w_tr_cmd();
@@ -1108,7 +1156,8 @@ void convolutional_layer_forward_propagation(struct list_node *ptr, unsigned int
                     set_output_recv_cnt_cmd(base_idx);
                     uint32_t tmp_s;
                     pa = pa + output_offset;
-                    memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    // memcpy(&tmp_s, &pa, sizeof(tmp_s));
+                    tmp_s = (int)pa;
                     set_dram_write_addr_cmd(s%4, tmp_s);
 
                     set_dram_w_tr_cmd();

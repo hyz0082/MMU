@@ -141,34 +141,31 @@ void set_gemm_core_sel_cmd(int sel) {
     __asm__ volatile ("nop");
 }
 
-void send_bn_mul_data(my_float_t data, int pos){
-    uint32_t tmp;
-    memcpy(&tmp, &data, sizeof(my_float_t));
-    *PARAM_1_ADDR = pos;
-    *PARAM_2_ADDR = tmp;
-    *TPU_CMD = SET_MUL_VAL;
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-}
+// void send_bn_mul_data(my_float_t data, int pos){
+//     uint32_t tmp;
+//     memcpy(&tmp, &data, sizeof(my_float_t));
+//     *PARAM_1_ADDR = pos;
+//     *PARAM_2_ADDR = tmp;
+//     *TPU_CMD = SET_MUL_VAL;
+//     __asm__ volatile ("nop");
+//     __asm__ volatile ("nop");
+// }
 
-void send_bn_add_data(my_float_t data, int pos){
-    uint32_t tmp;
-    memcpy(&tmp, &data, sizeof(my_float_t));
-    *PARAM_1_ADDR = pos;
-    *PARAM_2_ADDR = tmp;
-    *TPU_CMD = SET_ADD_VAL;
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-}
+// void send_bn_add_data(my_float_t data, int pos){
+//     uint32_t tmp;
+//     memcpy(&tmp, &data, sizeof(my_float_t));
+//     *PARAM_1_ADDR = pos;
+//     *PARAM_2_ADDR = tmp;
+//     *TPU_CMD = SET_ADD_VAL;
+//     __asm__ volatile ("nop");
+//     __asm__ volatile ("nop");
+// }
 
 void reset_cmd() {
     set_gemm_core_sel_cmd(15);
     *TPU_CMD = RESET;
     __asm__ volatile ("nop");
 
-    // set_gemm_core_sel_cmd(2);
-    
-    // *TPU_CMD = RESET;
     set_gemm_core_sel_cmd(1);
     __asm__ volatile ("nop");
 }
@@ -644,7 +641,6 @@ void write_dram_value_cmd(my_float_t *addr, my_float_t data) {
     // for(int i = 0; i < 100; i++) {
     //     __asm__ volatile ("nop");
     // }
-
 }
 
 

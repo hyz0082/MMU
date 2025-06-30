@@ -62,9 +62,8 @@ endfunction
 
 typedef enum {IDLE_S, 
               LOAD_IDX_S,
-              READ_DATA_1_S, READ_DATA_2_S, 
-              READ_DATA_3_S, READ_DATA_4_S,
-              READ_DATA_5_S,
+              READ_DATA_1_S, READ_DATA_2_S, READ_DATA_3_S, 
+              READ_DATA_4_S, READ_DATA_5_S,
               TRIGGER_S, TRIGGER_LAST_S,
               FORWARD_S,
               WAIT_IDLE_S,
@@ -79,12 +78,10 @@ typedef enum {IDLE_S,
               FMA_3_S,
               FMA_WAIT_IDLE_S,
               AVG_POOLING_ACC_S,
-              WAIT_AVG_POOLING_ACC_S,
-              AVG_POOLING_DIV_S,
+            //   WAIT_AVG_POOLING_ACC_S,
+            //   AVG_POOLING_DIV_S,
               WAIT_AVG_POOLING_DIV_S,
-              WAIT_MAX_POOLING_S,
-            //   SET_CONV_MODE_S, 
-            //   SET_FIX_MAC_MODE_S,
+            //   WAIT_MAX_POOLING_S,
               SW_READ_DATA_S,
               WAIT_SF_ACC_S,
               WAIT_SF_S,
@@ -93,7 +90,6 @@ typedef enum {IDLE_S,
               OUTPUT_3_S} state_t;
 
 state_t curr_state, next_state;
-
 
 typedef enum {SW_READ,   SW_WRITE,
               TPU_READ,  TPU_WRITE,
@@ -192,20 +188,6 @@ logic [1 : 0] mode;
 logic   [DATA_WIDTH*4-1 : 0]  bn_fma_out_r      [0 : 3];
 logic batchNormResultValid;
 
-/*
- * skip connection signal
- */
-// logic   [DATA_WIDTH-1   : 0]  fma_a_data  [0 : 3];
-// logic                         fma_a_valid [0 : 3];
-// logic   [DATA_WIDTH-1   : 0]  fma_b_data  [0 : 3];
-// logic                         fma_b_valid [0 : 3];
-// logic   [DATA_WIDTH-1   : 0]  fma_c_data  [0 : 3];
-// logic                         fma_c_valid [0 : 3];
-// logic   [DATA_WIDTH-1   : 0]  fma_out        [0 : 3];
-// logic   [DATA_WIDTH-1   : 0]  fma_out_relu   [0 : 3];
-// logic                         fma_out_valid   [0 : 3];
-// logic                         fma_out_valid_r [0 : 3];
-
 logic   [DATA_WIDTH*4-1 : 0]  fma_out_r;
 
 logic   [ADDR_BITS-1    : 0]  sram_r_idx [0 : 3];
@@ -219,10 +201,6 @@ logic   [ADDR_BITS-1    : 0]  calc_len;
 
 logic skipConnectionResultValid;
 
-// logic   [DATA_WIDTH-1 : 0] mul_val_r;
-// logic   [DATA_WIDTH-1 : 0] add_val_r;
-
-
 /*
  * AVERAGE POOLING SIGNAL (NEW)
  * 9 COMPARATER FOR MAX POOLING
@@ -231,14 +209,14 @@ logic skipConnectionResultValid;
 logic   [DATA_WIDTH-1   : 0] pooling_data_r [0 : 51];
 logic   [ADDR_BITS-1    : 0] pooling_index;
 logic   [DATA_WIDTH-1   : 0] pooling_result;
-logic   [DATA_WIDTH-1   : 0] acc_data_in , div_data_in;
-logic   [DATA_WIDTH-1   : 0] acc_data_out, div_data_out;
+// logic   [DATA_WIDTH-1   : 0] acc_data_in , div_data_in;
+// logic   [DATA_WIDTH-1   : 0] acc_data_out, div_data_out;
 logic                        acc_data_in_valid, div_data_valid;
-logic                        acc_data_out_valid;
-logic                        acc_data_in_last, acc_data_out_last;
-logic   [DATA_WIDTH-1   : 0] avg_pooling_data;
+// logic                        acc_data_out_valid;
+// logic                        acc_data_in_last, acc_data_out_last;
+// logic   [DATA_WIDTH-1   : 0] avg_pooling_data;
 
-logic   [ADDR_BITS-1    : 0] acc_recv_cnt;
+// logic   [ADDR_BITS-1    : 0] acc_recv_cnt;
 
 logic enable_avg_pooling;
 
@@ -367,14 +345,9 @@ always_comb begin
                      else
                         next_state = FMA_WAIT_IDLE_S;
     AVG_POOLING_ACC_S:  if(pooling_index == 48)
-                            next_state = WAIT_AVG_POOLING_DIV_S;//WAIT_AVG_POOLING_ACC_S;
+                            next_state = WAIT_AVG_POOLING_DIV_S;
                         else 
                             next_state = AVG_POOLING_ACC_S;
-    // WAIT_AVG_POOLING_ACC_S: if(acc_recv_cnt == 49)
-    //                             next_state = AVG_POOLING_DIV_S;
-    //                         else
-    //                             next_state = WAIT_AVG_POOLING_ACC_S;
-    // AVG_POOLING_DIV_S: next_state = WAIT_AVG_POOLING_DIV_S;
     WAIT_AVG_POOLING_DIV_S: if(div_data_valid) next_state = IDLE_S;
                             else next_state = WAIT_AVG_POOLING_DIV_S;
     WAIT_SF_ACC_S: if(exp_acc_valid) next_state = IDLE_S;
@@ -418,9 +391,7 @@ always_ff @(posedge clk_i) begin
     end
 end
 
-//#########################
-//#       STORE KMN       #
-//#########################
+// set KMN value
 always_ff @(posedge clk_i) begin
     if( is_tpu_cmd_valid_and_match(SET_KMN) ) begin
         if(tpu_param_1_in == 0) begin
@@ -436,9 +407,7 @@ always_ff @(posedge clk_i) begin
 end
 
 
-//#########################
-//#      SEND OUTPUT      #
-//#########################
+// read result
 always_comb begin
     tpu_data_1_out = P_data_out_reg[0];
     tpu_data_2_out = P_data_out_reg[1];
@@ -472,9 +441,7 @@ always_comb begin
     end
 end
 
-//#########################
-//#       SEND INPUT      #
-//#########################
+// send input to GeMM
 always_ff @(posedge clk_i) begin
     for (int i = 0; i < 4; i++) begin
         if( curr_state == TRIGGER_LAST_S ||
@@ -864,10 +831,10 @@ end
 //#########################
 always_comb begin
     if((tpu_cmd_valid_reg && tpu_cmd_reg == RESET           ) || 
-       (tpu_cmd_valid_reg && tpu_cmd_reg == SET_MUL_VAL     ) || 
-       (tpu_cmd_valid_reg && tpu_cmd_reg == SET_ADD_VAL     ) ||
+    //    (tpu_cmd_valid_reg && tpu_cmd_reg == SET_MUL_VAL     ) || 
+    //    (tpu_cmd_valid_reg && tpu_cmd_reg == SET_ADD_VAL     ) ||
        (tpu_cmd_valid_reg && tpu_cmd_reg == SET_CONV_MODE   ) || 
-       (tpu_cmd_valid_reg && tpu_cmd_reg == SET_FIX_MAC_MODE) ||
+    //    (tpu_cmd_valid_reg && tpu_cmd_reg == SET_FIX_MAC_MODE) ||
        (curr_state == TRIGGER_S                             ) ||
        (curr_state == TRIGGER_LAST_S                        ) ||
        (curr_state == FORWARD_S                             ) ||
@@ -882,9 +849,7 @@ end
 //#########################
 //#       MMU CMD         #
 //#########################
-/*
-preload error
-*/
+
 always_comb begin
     if(curr_state == FORWARD_S) begin
         mmu_cmd         = FORWARD;
@@ -1003,13 +968,7 @@ floating_point_div div(
         .m_axis_result_tvalid(softmax_result_valid)
     );
 
-//#########################
-//    AVG POOLING
-//#########################
-
-/*
- * store BatchNorm output
- */
+// store skip connection output
 always_ff @( posedge clk_i ) begin
     if(skipConnectionResultValid) begin
         pooling_data_r[sram_w_idx*4  ] <= fma_out_r[(DATA_WIDTH*4-1)-:DATA_WIDTH];
@@ -1106,7 +1065,6 @@ assign I_out[1] = I_out[0];
 assign I_out[2] = I_out[0];
 assign I_out[3] = I_out[0];
 
-
 /*
  * I_OUT_OFFSET BUFFER
  * I_OUT_OFFSET
@@ -1180,9 +1138,8 @@ end
 endgenerate
 
 /*
- * BatchNorm and skip add ctrl signal
+ * skip connection ctrl signal
  */
-
 always_ff @( posedge clk_i ) begin
     if( is_tpu_cmd_valid_and_match(SET_RELU) ) begin
         relu_en <= tpu_param_1_in;
@@ -1287,49 +1244,6 @@ end
 
 assign ret_avg_pooling = pooling_result;
 
-/*
- * avg pooling ip 
- */
-// assign acc_data_in = pooling_data_r[pooling_index];
-// assign acc_data_in_valid = (curr_state == AVG_POOLING_ACC_S);
-// assign acc_data_in_last = (pooling_index == 48);
-
-// always_ff @( posedge clk_i ) begin
-//     if(rst_i)                     acc_recv_cnt <= 0;
-//     else if(curr_state == IDLE_S) acc_recv_cnt <= 0;
-//     else if(acc_data_out_valid)   acc_recv_cnt <= acc_recv_cnt + 1;
-// end
-
-// always_ff @( posedge clk_i ) begin
-//     if(acc_data_out_valid)  pooling_result <= acc_data_out;
-//     else if(div_data_valid) pooling_result <= div_data_out;
-// end
-
-// floating_point_acc ACC2(
-
-//     .aclk(clk_i),
-
-//     .s_axis_a_tdata(acc_data_in),
-//     .s_axis_a_tlast(acc_data_in_last),
-//     .s_axis_a_tvalid(acc_data_in_valid),
-
-//     .m_axis_result_tdata(acc_data_out),
-//     .m_axis_result_tlast(acc_data_out_last),
-//     .m_axis_result_tvalid(acc_data_out_valid)
-// );
-// /*
-//  * div ip
-//  */
-// floating_point_div div2(
-//         .aclk(clk_i),
-//         .s_axis_a_tdata(pooling_result),
-//         .s_axis_a_tvalid((curr_state == AVG_POOLING_DIV_S)),
-//         .s_axis_b_tdata(16'h5220), // 49
-//         .s_axis_b_tvalid(1),
-//         .m_axis_result_tdata(div_data_out),
-//         .m_axis_result_tvalid(div_data_valid)
-//     );
-
 AVGPOOLING #(
     .ACLEN(ACLEN),
     .ADDR_BITS(ADDR_BITS),
@@ -1346,11 +1260,7 @@ AVGPOOLING #(
     .avgPoolingResult_r(pooling_result)
 );
 
-
-/*
- * BATCHNORM HARDWARE
- */
-
+// batchNorm
 BATCHNORM #(
     .ACLEN(ACLEN),
     .ADDR_BITS(ADDR_BITS),
